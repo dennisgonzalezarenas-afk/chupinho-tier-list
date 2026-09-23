@@ -659,40 +659,31 @@ async function fetchWithTimeout(url, ms=15000) {
 }
 
 async function getLiveSource() {
-  const stamp = Date.now();
-  const target = SOURCE_URL + (SOURCE_URL.includes('?') ? '&' : '?') + '_fresh=' + stamp;
-
-  const attempts = [
-    {
-      name: 'AllOrigins',
-      url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target)
-    },
-    {
-      name: 'corsproxy.io',
-      url: 'https://corsproxy.io/?url=' + encodeURIComponent(target)
-    },
-    {
-      name: 'isomorphic-git CORS',
-      url: 'https://cors.isomorphic-git.org/' + target
-    },
-    {
-      name: 'Jina Reader',
-      url: 'https://r.jina.ai/' + target
-    }
-  ];
-
+  // La web pública usa nuestro propio endpoint de Vercel.
+  // Así evitamos CORS y, sobre todo, las copias antiguas de proxies externos.
   let lastErr = null;
+  try {
+    const txt = await fetchWithTimeout('/api/efhub?t=' + Date.now(), 22000);
+    const players = extractPlayers(txt);
+    if (players.length >= 20) {
+      return {raw: txt, via: 'eFHUB directo', players};
+    }
+    lastErr = new Error('eFHUB directo: solo se detectaron ' + players.length + ' cartas');
+  } catch(e) {
+    lastErr = e;
+  }
+
+  // Respaldo únicamente si el endpoint propio falla.
+  const attempts = [
+    { name: 'AllOrigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(SOURCE_URL) },
+    { name: 'Jina Reader', url: 'https://r.jina.ai/' + SOURCE_URL }
+  ];
   for (const a of attempts) {
     try {
       const txt = await fetchWithTimeout(a.url, 22000);
       const players = extractPlayers(txt);
-      if (players.length >= 20) {
-        return {raw: txt, via: a.name, players};
-      }
-      lastErr = new Error(a.name + ': respuesta recibida pero solo se detectaron ' + players.length + ' cartas');
-    } catch(e) {
-      lastErr = e;
-    }
+      if (players.length >= 20) return {raw: txt, via: a.name, players};
+    } catch(e) { lastErr = e; }
   }
   throw lastErr || new Error('No se pudo leer eFHUB');
 }
@@ -713,7 +704,7 @@ async function syncFromEfhub(manual=false) {
     DATA = live;
     render();
     document.querySelectorAll('.card img').forEach(attachFallback);
-    try { localStorage.setItem('efhub_live_data_v8_profiles', JSON.stringify(DATA)); } catch(e) {}
+    try { localStorage.setItem('efhub_live_data_v9_profiles', JSON.stringify(DATA)); } catch(e) {}
     if (status) status.textContent = `${count} cartas sincronizadas · ${source.via}`;
     if (badge) { badge.textContent='Sincronizada ahora'; badge.style.color='#67d391'; }
     return true;
@@ -727,11 +718,11 @@ async function syncFromEfhub(manual=false) {
   }
 }
 document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(true));
-document.getElementById('forceBtn')?.addEventListener('click', ()=>{ try{localStorage.removeItem('efhub_live_data_v8_profiles')}catch(e){}; syncFromEfhub(true); });
+document.getElementById('forceBtn')?.addEventListener('click', ()=>{ try{localStorage.removeItem('efhub_live_data_v9_profiles')}catch(e){}; syncFromEfhub(true); });
 
 // If a previous live sync exists, show it immediately, then refresh from eFHUB.
 try {
-  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v8_profiles') || 'null');
+  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v9_profiles') || 'null');
   if (Array.isArray(saved) && totalPlayers(saved) > 20) {
     DATA = saved;
     render();
