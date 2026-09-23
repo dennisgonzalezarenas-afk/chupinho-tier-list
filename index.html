@@ -376,39 +376,13 @@ let DATA = JSON.parse(JSON.stringify(FALLBACK_DATA));
 const app = document.getElementById('app');
 
 const EFHUB_PLAYER_BASE = 'https://efhub.com/es/players/';
-const EFHUB_USER_ID = '116014046796435242846';
 
-// Builds públicas de ChuPiNho. Se sincronizan automáticamente desde el perfil público.
-// Ibrahimović queda como respaldo validado por si eFHUB no responde temporalmente.
-let CUSTOM_BUILD_URLS = {
+// Builds públicas de ChuPiNho.
+// Este mapa se rellena con los enlaces completos exportados desde eFHUB.
+// Si una carta no tiene build guardada, se abre su ficha normal.
+const CUSTOM_BUILD_URLS = {
   '88040387119642': 'https://efhub.com/es/players/88040387119642?build=88040387119642_6_1_9_0_6_8_3_0_0_9_12&userId=116014046796435242846'
 };
-
-try {
-  const savedBuilds = JSON.parse(localStorage.getItem('efhub_public_builds_v1') || 'null');
-  if (savedBuilds && typeof savedBuilds === 'object' && !Array.isArray(savedBuilds)) {
-    CUSTOM_BUILD_URLS = { ...CUSTOM_BUILD_URLS, ...savedBuilds };
-  }
-} catch(e) {}
-
-async function syncPublicBuilds() {
-  try {
-    const r = await fetch('/api/efhub?mode=builds&t=' + Date.now(), {cache:'no-store'});
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const payload = await r.json();
-    if (!payload || !payload.builds || typeof payload.builds !== 'object') {
-      throw new Error('Respuesta de builds no válida');
-    }
-    const incoming = payload.builds;
-    if (Object.keys(incoming).length) {
-      CUSTOM_BUILD_URLS = { ...CUSTOM_BUILD_URLS, ...incoming };
-      try { localStorage.setItem('efhub_public_builds_v1', JSON.stringify(CUSTOM_BUILD_URLS)); } catch(e) {}
-    }
-    return payload.count || Object.keys(incoming).length;
-  } catch(e) {
-    return Object.keys(CUSTOM_BUILD_URLS).length;
-  }
-}
 
 function efhubPlayerIdFromCard(card) {
   const img = card?.querySelector('img');
@@ -821,7 +795,6 @@ try {
 } catch(e) {}
 if (new URLSearchParams(location.search).get('nosync') !== '1') {
   setTimeout(()=>syncFromEfhub(false), 100);
-  setTimeout(()=>syncPublicBuilds(), 180);
 }
 
 
