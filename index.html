@@ -17,11 +17,70 @@
 html,body{margin:0;background:radial-gradient(circle at 50% 0,#13213b 0,#050913 44%,#03060b 100%);color:var(--text);font-family:'Montserrat',Segoe UI,Arial,sans-serif}
 body{min-height:100vh}
 .controls{
-  position:sticky;top:0;z-index:50;padding:14px 18px;
-  display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+  position:sticky;top:0;z-index:50;padding:8px 14px;
+  display:block;
   background:rgba(3,7,14,.94);backdrop-filter:blur(12px);
   border-bottom:1px solid rgba(255,255,255,.08)
 }
+.toolbar-main{
+  display:flex;align-items:center;gap:8px;min-height:42px;
+}
+.toolbar-toggle{
+  white-space:nowrap;
+}
+.toolbar-current{
+  color:#dce6f7;font-size:12px;font-weight:800;
+  padding:7px 10px;border-radius:8px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.08);
+  white-space:nowrap;
+}
+#syncStatus{
+  margin-left:auto;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#9ca9bf;
+  font-size:12px;
+  font-weight:700;
+}
+.toolbar-panel{
+  display:none;
+  position:absolute;
+  top:calc(100% + 6px);
+  left:14px;
+  z-index:60;
+  width:min(760px,calc(100vw - 28px));
+  padding:10px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(7,13,24,.985);
+  box-shadow:0 18px 45px rgba(0,0,0,.48);
+  backdrop-filter:blur(16px);
+}
+.toolbar-panel.open{display:grid}
+.categories-panel{
+  grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+  gap:8px;
+}
+.actions-panel{
+  width:min(520px,calc(100vw - 28px));
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:8px;
+}
+.toolbar-panel button{
+  width:100%;
+  text-align:left;
+}
+.toolbar-panel .panel-status{
+  grid-column:1/-1;
+  padding:4px 2px 0;
+  color:#9ca9bf;
+  font-size:12px;
+  font-weight:700;
+}
+
 button{
   appearance:none;border:1px solid rgba(255,255,255,.15);background:#111b2c;color:white;
   padding:9px 13px;border-radius:9px;font-weight:700;cursor:pointer
@@ -224,28 +283,50 @@ body.single .hero p{display:none}
 @media (max-width:900px){
   main{padding:12px} .cards{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;padding:10px}
   .cat-head{padding:10px 12px} .cat-num{width:34px;height:34px;font-size:18px}
+  .controls{padding:7px 9px}
+  .toolbar-main{gap:6px;min-height:40px}
+  .toolbar-main button{padding:8px 10px;font-size:13px}
+  .toolbar-current{font-size:11px;padding:6px 8px}
+  #syncStatus{font-size:11px}
+  .toolbar-panel{left:9px;width:calc(100vw - 18px)}
+  .actions-panel{width:calc(100vw - 18px)}
+  .categories-panel{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 </style>
 </head>
 <body>
 <div class="controls" id="controls">
-  <button data-cat="all" class="active">Todas</button>
-  <button data-cat="1">Delanteros altos</button>
-  <button data-cat="2">Delanteros</button>
-  <button data-cat="3">2º delanteros</button>
-  <button data-cat="4">MP / interiores</button>
-  <button data-cat="5">MC con tiro</button>
-  <button data-cat="6">Mixtos</button>
-  <button data-cat="7">MCD</button>
-  <button data-cat="8">Lat. defensivos</button>
-  <button data-cat="9">Lat. ofensivos</button>
-  <button data-cat="10">Def. altos</button>
-  <button data-cat="11">Def. completos</button>
-  <button data-cat="12">Porteros</button>
-  <button id="syncBtn">Actualizar desde eFHUB</button><button id="forceBtn">Forzar actualización</button><span id="syncStatus" style="font-size:12px;color:#9ca9bf;font-weight:700"></span><button id="cleanBtn">Modo directo</button>
-  <button id="fullBtn">Pantalla completa</button>
-  <button id="jpgBtn">Exportar JPG</button>
-</div>
+  <div class="toolbar-main">
+    <button id="categoriesToggle" class="toolbar-toggle" aria-expanded="false">☰ Categorías</button>
+    <button id="actionsToggle" class="toolbar-toggle" aria-expanded="false">⚙ Acciones</button>
+    <span class="toolbar-current" id="activeCategoryLabel">Todas</span>
+    <span id="syncStatus"></span>
+  </div>
+
+  <div class="toolbar-panel categories-panel" id="categoriesPanel">
+    <button data-cat="all" class="active">Todas</button>
+    <button data-cat="1">Delanteros altos</button>
+    <button data-cat="2">Delanteros</button>
+    <button data-cat="3">2º delanteros</button>
+    <button data-cat="4">MP / interiores</button>
+    <button data-cat="5">MC con tiro</button>
+    <button data-cat="6">Mixtos</button>
+    <button data-cat="7">MCD</button>
+    <button data-cat="8">Lat. defensivos</button>
+    <button data-cat="9">Lat. ofensivos</button>
+    <button data-cat="10">Def. altos</button>
+    <button data-cat="11">Def. completos</button>
+    <button data-cat="12">Porteros</button>
+  </div>
+
+  <div class="toolbar-panel actions-panel" id="actionsPanel">
+    <button id="syncBtn">Actualizar desde eFHUB</button>
+    <button id="forceBtn">Forzar actualización</button>
+    <button id="cleanBtn">Modo directo</button>
+    <button id="fullBtn">Pantalla completa</button>
+    <button id="jpgBtn">Exportar JPG</button>
+  </div>
+
 <main id="capture">
   
   <div class="hero">
@@ -695,10 +776,42 @@ if (new URLSearchParams(location.search).get('nosync') !== '1') {
 }
 
 
+const categoriesToggle = document.getElementById('categoriesToggle');
+const actionsToggle = document.getElementById('actionsToggle');
+const categoriesPanel = document.getElementById('categoriesPanel');
+const actionsPanel = document.getElementById('actionsPanel');
+const activeCategoryLabel = document.getElementById('activeCategoryLabel');
+
+function setPanel(panel, button, open) {
+  panel?.classList.toggle('open', open);
+  button?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function closeToolbarPanels() {
+  setPanel(categoriesPanel, categoriesToggle, false);
+  setPanel(actionsPanel, actionsToggle, false);
+}
+categoriesToggle?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = !categoriesPanel.classList.contains('open');
+  setPanel(actionsPanel, actionsToggle, false);
+  setPanel(categoriesPanel, categoriesToggle, open);
+});
+actionsToggle?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = !actionsPanel.classList.contains('open');
+  setPanel(categoriesPanel, categoriesToggle, false);
+  setPanel(actionsPanel, actionsToggle, open);
+});
+document.querySelectorAll('.toolbar-panel').forEach(p=>p.addEventListener('click',e=>e.stopPropagation()));
+document.addEventListener('click', closeToolbarPanels);
+
 function setCategory(id) {
   document.querySelectorAll('.controls button[data-cat]').forEach(b=>b.classList.toggle('active', b.dataset.cat===id));
+  const selectedButton = document.querySelector(`.controls button[data-cat="${id}"]`);
+  if (activeCategoryLabel) activeCategoryLabel.textContent = selectedButton?.textContent?.trim() || 'Todas';
   document.body.classList.toggle('single', id!=='all');
   document.querySelectorAll('.category').forEach(s=>s.classList.toggle('selected', id==='all'||s.dataset.id===id));
+  closeToolbarPanels();
   if(id!=='all') document.querySelector('.category.selected')?.scrollIntoView({behavior:'smooth',block:'start'});
 }
 document.querySelectorAll('button[data-cat]').forEach(b=>b.addEventListener('click',()=>setCategory(b.dataset.cat)));
