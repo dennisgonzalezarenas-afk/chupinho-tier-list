@@ -28,6 +28,20 @@ body{min-height:100vh}
 .toolbar-toggle{
   white-space:nowrap;
 }
+.toolbar-profile{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  white-space:nowrap;
+  text-decoration:none;
+  border:1px solid rgba(255,255,255,.15);
+  background:#111b2c;
+  color:#fff;
+  padding:9px 13px;
+  border-radius:9px;
+  font-weight:700;
+}
+.toolbar-profile:hover{background:#18263d}
 .toolbar-current{
   color:#dce6f7;font-size:12px;font-weight:800;
   padding:7px 10px;border-radius:8px;
@@ -285,7 +299,7 @@ body.single .hero p{display:none}
   .cat-head{padding:10px 12px} .cat-num{width:34px;height:34px;font-size:18px}
   .controls{padding:7px 9px}
   .toolbar-main{gap:6px;min-height:40px}
-  .toolbar-main button{padding:8px 10px;font-size:13px}
+  .toolbar-main button,.toolbar-profile{padding:8px 10px;font-size:13px}
   .toolbar-current{font-size:11px;padding:6px 8px}
   #syncStatus{font-size:11px}
   .toolbar-panel{left:9px;width:calc(100vw - 18px)}
@@ -299,6 +313,7 @@ body.single .hero p{display:none}
   <div class="toolbar-main">
     <button id="categoriesToggle" class="toolbar-toggle" aria-expanded="false">☰ Categorías</button>
     <button id="actionsToggle" class="toolbar-toggle" aria-expanded="false">⚙ Acciones</button>
+    <a class="toolbar-profile" href="https://efhub.com/es/community/116014046796435242846" target="_blank" rel="noopener noreferrer">★ Mis builds eFHUB</a>
     <span class="toolbar-current" id="activeCategoryLabel">Todas</span>
     <span id="syncStatus"></span>
   </div>
