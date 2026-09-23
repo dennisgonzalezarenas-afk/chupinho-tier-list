@@ -322,8 +322,7 @@ body.single .hero p{display:none}
   <div class="toolbar-panel actions-panel" id="actionsPanel">
     <button id="syncBtn">Actualizar desde eFHUB</button>
     <button id="forceBtn">Forzar actualización</button>
-    <button id="cleanBtn">Modo directo</button>
-    <button id="fullBtn">Pantalla completa</button>
+<button id="fullBtn">Pantalla completa</button>
     <button id="jpgBtn">Exportar JPG</button>
   </div>
 </div>
@@ -817,14 +816,12 @@ function setCategory(id) {
 }
 document.querySelectorAll('button[data-cat]').forEach(b=>b.addEventListener('click',()=>setCategory(b.dataset.cat)));
 
-document.getElementById('cleanBtn').addEventListener('click',()=>document.body.classList.toggle('clean'));
 document.getElementById('fullBtn').addEventListener('click',async()=>{
   if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
   else await document.exitFullscreen();
 });
 
 const params = new URLSearchParams(location.search);
-if(params.get('clean')==='1') document.body.classList.add('clean');
 if(params.get('cat')) setCategory(params.get('cat'));
 
 async function loadScript(src){
