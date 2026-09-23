@@ -377,6 +377,12 @@ const app = document.getElementById('app');
 
 const EFHUB_PLAYER_BASE = 'https://efhub.com/es/players/';
 
+// Enlaces directos a builds personalizadas de ChuPiNho.
+// Si una carta no está aquí, abre la ficha normal de eFHUB.
+const CUSTOM_BUILD_URLS = {
+  '88040387119642': 'https://efhub.com/es/players/88040387119642?sho=6&pas=1&dri=9&dex=8&lbs=9&aes=6&gk1=3&b2=106&pos=CF&mgr=17605071047055&msk=PossessionGame&msv=89'
+};
+
 function efhubPlayerIdFromCard(card) {
   const img = card?.querySelector('img');
   if (!img) return null;
@@ -404,7 +410,7 @@ app.addEventListener('dblclick', (event) => {
   if (!playerId) return;
 
   window.open(
-    EFHUB_PLAYER_BASE + playerId,
+    CUSTOM_BUILD_URLS[playerId] || (EFHUB_PLAYER_BASE + playerId),
     '_blank',
     'noopener,noreferrer'
   );
