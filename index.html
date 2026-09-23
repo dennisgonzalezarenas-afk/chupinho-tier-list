@@ -589,32 +589,19 @@ function splitLivePlayers(players) {
   const lateralDef = new Set(['Lilian Thuram','Giuseppe Bergomi','A. Costacurta']);
   byId(9).players = c.filter(p => !lateralDef.has(normalizeName(p.name)));
 
-  // Separación fija indicada por el usuario. Callejo es solo separador y nunca aparece.
-  const pickD = name => getByName(d, name);
-  byId(10).players = [
-    pickD('Rio Ferdinand'),
-    pickD('Raphael Varane'),
-    pickD('Gerard Pique')
-  ].filter(Boolean);
-
-  byId(11).players = [
-    pickD('Paolo Maldini'),
-    pickD('Marcel Desailly'),
-    pickD('Fabio Cannavaro'),
-    pickD('Alessandro Nesta'),
-    pickD('Ronald Araujo'),
-    pickD('Virgil van Dijk'),
-    pickD('William Saliba'),
-    pickD('Jaap Stam'),
-    pickD('Vincent Kompany'),
-    pickD('Gabriel Magalhaes'),
-    pickD('Micky van de Ven'),
-    pickD('Carles Puyol'),
-    pickD('Pau Cubarsi'),
-    pickD('Pepe'),
-    pickD('Franco Baresi'),
-    pickD('Franz Beckenbauer')
-  ].filter(Boolean);
+  // En eFHUB, Callejo separa los dos bloques de defensas.
+  // Se conserva exactamente el orden de la lista: antes de Callejo = altos;
+  // después de Callejo = completos. Callejo no se muestra.
+  const callejo = d.findIndex(p => normalizeName(p.name).includes('Callejo'));
+  if (callejo >= 0) {
+    byId(10).players = d.slice(0, callejo);
+    byId(11).players = d.slice(callejo + 1);
+  } else {
+    // Si el separador no llega en la respuesta, no inventamos una nueva clasificación.
+    // Conservamos la división integrada hasta la siguiente lectura válida de eFHUB.
+    byId(10).players = FALLBACK_DATA.find(x => x.id === 10)?.players.map(p => ({...p})) || [];
+    byId(11).players = FALLBACK_DATA.find(x => x.id === 11)?.players.map(p => ({...p})) || [];
+  }
 
   byId(12).players = e;
 
@@ -704,7 +691,7 @@ async function syncFromEfhub(manual=false) {
     DATA = live;
     render();
     document.querySelectorAll('.card img').forEach(attachFallback);
-    try { localStorage.setItem('efhub_live_data_v9_profiles', JSON.stringify(DATA)); } catch(e) {}
+    try { localStorage.setItem('efhub_live_data_v10_profiles', JSON.stringify(DATA)); } catch(e) {}
     if (status) status.textContent = `${count} cartas sincronizadas · ${source.via}`;
     if (badge) { badge.textContent='Sincronizada ahora'; badge.style.color='#67d391'; }
     return true;
@@ -718,11 +705,11 @@ async function syncFromEfhub(manual=false) {
   }
 }
 document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(true));
-document.getElementById('forceBtn')?.addEventListener('click', ()=>{ try{localStorage.removeItem('efhub_live_data_v9_profiles')}catch(e){}; syncFromEfhub(true); });
+document.getElementById('forceBtn')?.addEventListener('click', ()=>{ try{localStorage.removeItem('efhub_live_data_v10_profiles')}catch(e){}; syncFromEfhub(true); });
 
 // If a previous live sync exists, show it immediately, then refresh from eFHUB.
 try {
-  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v9_profiles') || 'null');
+  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v10_profiles') || 'null');
   if (Array.isArray(saved) && totalPlayers(saved) > 20) {
     DATA = saved;
     render();
