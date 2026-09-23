@@ -589,17 +589,20 @@ function splitLivePlayers(players) {
   const lateralDef = new Set(['Lilian Thuram','Giuseppe Bergomi','A. Costacurta']);
   byId(9).players = c.filter(p => !lateralDef.has(normalizeName(p.name)));
 
-  // Defensas altos: desde Rio Ferdinand hasta Gerard Pique, ambos incluidos,
-  // respetando exactamente todos los jugadores y el orden de eFHUB entre ambos.
+  // eFHUB manda siempre: conservamos literalmente el orden de su tier D.
+  // Nuestros apartados solo seleccionan tramos de ese orden; nunca reordenan cartas.
   const ferdinand = d.findIndex(p => normalizeName(p.name) === 'Rio Ferdinand');
   const pique = d.findIndex(p => normalizeName(p.name) === 'Gerard Pique');
   if (ferdinand >= 0 && pique >= ferdinand) {
     byId(10).players = d.slice(ferdinand, pique + 1);
-    byId(11).players = d.slice(pique + 1)
-      .filter(p => !normalizeName(p.name).includes('Callejo'));
+    // Defensas completos conserva el bloque complementario de D en el mismo orden de eFHUB.
+    // Maldini permanece aquí y además se duplica expresamente en Laterales defensivos.
+    byId(11).players = d
+      .filter((p, i) => (i < ferdinand || i > pique) && !normalizeName(p.name).includes('Callejo'));
   } else {
-    byId(10).players = FALLBACK_DATA.find(x => x.id === 10)?.players.map(p => ({...p})) || [];
-    byId(11).players = FALLBACK_DATA.find(x => x.id === 11)?.players.map(p => ({...p})) || [];
+    // Si no podemos identificar los límites, mostramos D en su orden original en vez de inventar un orden.
+    byId(10).players = [];
+    byId(11).players = d.filter(p => !normalizeName(p.name).includes('Callejo'));
   }
 
   byId(12).players = e;
@@ -690,7 +693,7 @@ async function syncFromEfhub(manual=false) {
     DATA = live;
     render();
     document.querySelectorAll('.card img').forEach(attachFallback);
-    try { localStorage.setItem('efhub_live_data_v11_profiles', JSON.stringify(DATA)); } catch(e) {}
+    try { localStorage.setItem('efhub_live_data_v12_profiles', JSON.stringify(DATA)); } catch(e) {}
     if (status) status.textContent = `${count} cartas sincronizadas · ${source.via}`;
     if (badge) { badge.textContent='Sincronizada ahora'; badge.style.color='#67d391'; }
     return true;
@@ -704,11 +707,11 @@ async function syncFromEfhub(manual=false) {
   }
 }
 document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(true));
-document.getElementById('forceBtn')?.addEventListener('click', ()=>{ try{localStorage.removeItem('efhub_live_data_v11_profiles')}catch(e){}; syncFromEfhub(true); });
+document.getElementById('forceBtn')?.addEventListener('click', ()=>{ try{localStorage.removeItem('efhub_live_data_v12_profiles')}catch(e){}; syncFromEfhub(true); });
 
 // If a previous live sync exists, show it immediately, then refresh from eFHUB.
 try {
-  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v11_profiles') || 'null');
+  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v12_profiles') || 'null');
   if (Array.isArray(saved) && totalPlayers(saved) > 20) {
     DATA = saved;
     render();
