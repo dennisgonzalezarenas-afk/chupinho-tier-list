@@ -11,10 +11,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Wait for Vercel production
-        run: sleep 10
-
-      - name: Fetch and parse list endpoints
+        run: sleep 8
+      - name: Compare live lists with integrated fallback
         shell: bash
         run: |
           set -euo pipefail
@@ -26,9 +26,13 @@ jobs:
           python - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
-          import re
+          import re, json, unicodedata
 
           TIERS={'S+','S','A','B','C','D','E'}
+
+          def norm(s):
+              s=unicodedata.normalize('NFKD',s or '')
+              return ''.join(ch for ch in s if not unicodedata.combining(ch)).lower().replace('ß','ss').strip()
 
           class P(HTMLParser):
               def __init__(self):
@@ -41,34 +45,77 @@ jobs:
                   self.stack.append([tag,[]])
                   if tag=='img':
                       src=attrs.get('src','')
-                      alt=attrs.get('alt','')
+                      alt=(attrs.get('alt','') or '').replace('Image:','').strip()
                       m=re.search(r'player_cards/(\d+)(?:_l)?\.png', src)
-                      if m:
-                          self.cards.append((self.current_tier,m.group(1),alt,src))
+                      if m and self.current_tier:
+                          self.cards.append((m.group(1),alt,self.current_tier))
               def handle_data(self,data):
                   if self.stack:
                       self.stack[-1][1].append(data)
               def handle_endtag(self,tag):
-                  if not self.stack:
-                      return
-                  t, chunks=self.stack.pop()
+                  if not self.stack: return
+                  t,chunks=self.stack.pop()
                   text=' '.join(''.join(chunks).split())
                   if text in TIERS:
                       self.current_tier=text
                   if self.stack and text:
                       self.stack[-1][1].append(text)
 
+          # Parse current FALLBACK_DATA from index.html.
+          index=Path('index.html').read_text()
+          m=re.search(r'const FALLBACK_DATA = (\[.*?\]);\nlet DATA',index,re.S)
+          if not m:
+              raise SystemExit('FALLBACK_DATA not found')
+          fallback=json.loads(m.group(1))
+
           total=0
           for i in range(1,13):
               html=Path(f'/tmp/efhub-lists/{i}.html').read_text(errors='ignore')
               p=P(); p.feed(html)
-              seen=[]
-              for tier,pid,alt,src in p.cards:
-                  if tier and pid not in [x[1] for x in seen]:
-                      seen.append((tier,pid,alt))
-              print(f'LIST {i}: {len(seen)} tier-scoped cards')
-              for row in seen[:3]:
-                  print('  ',row)
-              total += len(seen)
-          print('TOTAL TIER-SCOPED:',total)
+              live=[]
+              seen=set()
+              for pid,name,tier in p.cards:
+                  key=(pid,name)
+                  if key in seen: continue
+                  seen.add(key)
+                  live.append({'id':pid,'name':name,'tier':tier})
+              total += len(live)
+
+              old=[]
+              for pl in fallback[i-1]['players']:
+                  mm=re.search(r'player_cards/(\d+)',pl.get('img',''))
+                  old.append({'id':mm.group(1) if mm else '', 'name':pl.get('name','')})
+
+              old_exact=[(x['id'],norm(x['name'])) for x in old]
+              live_exact=[(x['id'],norm(x['name'])) for x in live]
+
+              old_by_name={norm(x['name']):x for x in old}
+              live_by_name={norm(x['name']):x for x in live}
+
+              versions=[]
+              for n in sorted(set(old_by_name)&set(live_by_name)):
+                  if old_by_name[n]['id'] != live_by_name[n]['id']:
+                      versions.append((old_by_name[n]['name'],old_by_name[n]['id'],live_by_name[n]['id']))
+
+              added=[x for x in live if (x['id'],norm(x['name'])) not in old_exact and norm(x['name']) not in {norm(v[0]) for v in versions}]
+              removed=[x for x in old if (x['id'],norm(x['name'])) not in live_exact and norm(x['name']) not in {norm(v[0]) for v in versions}]
+
+              common_old=[x for x in old_exact if x in live_exact]
+              common_live=[x for x in live_exact if x in old_exact]
+              reordered=common_old != common_live
+
+              print(f'CAT {i} {fallback[i-1]["name"]}: old={len(old)} live={len(live)}')
+              if versions:
+                  for name,oid,nid in versions:
+                      print(f'  VERSION: {name}: {oid} -> {nid}')
+              if added:
+                  print('  ADDED: ' + '; '.join(f'{x["name"]} [{x["id"]}]' for x in added))
+              if removed:
+                  print('  REMOVED: ' + '; '.join(f'{x["name"]} [{x["id"]}]' for x in removed))
+              if reordered:
+                  print('  ORDER CHANGED')
+              if not (versions or added or removed or reordered):
+                  print('  NO CONTENT CHANGE')
+
+          print('TOTAL LIVE:',total)
           PY
