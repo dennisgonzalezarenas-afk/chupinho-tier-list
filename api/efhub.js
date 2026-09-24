@@ -2,6 +2,8 @@ const USER_ID = '116014046796435242846';
 const MANAGER_ID = '17605071047055';
 const MANAGER_SKILL = 'PossessionGame';
 const MANAGER_VALUE = '89';
+const PROFILE_URL = `https://efhub.com/es/community/${USER_ID}`;
+const EFHUB_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36';
 
 const TIER_LIST_URLS = [
   "https://efhub.com/es/tier-list/116014046796435242846_78046652-98a8-48eb-9140-b25e37781b9c",
@@ -203,19 +205,98 @@ function extractBuildData(text) {
   return { builds, portableBuilds, booster2ByPlayer };
 }
 
-async function fetchEfhub(url) {
+async function fetchEfhub(url, extraHeaders={}) {
   const r = await fetch(url, {
     headers: {
-      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
+      'user-agent': EFHUB_UA,
       'accept': 'application/json,text/plain,text/html,application/xhtml+xml,*/*;q=0.8',
       'accept-language': 'es-ES,es;q=0.9,en;q=0.7',
-      'cache-control': 'no-cache'
+      'cache-control': 'no-cache',
+      ...extraHeaders
     },
     cache: 'no-store',
     signal: AbortSignal.timeout(18000)
   });
   const body = await r.text();
-  return { ok:r.ok, status:r.status, body };
+  return { ok:r.ok, status:r.status, body, headers:r.headers };
+}
+
+function getHubRequestCookie(headers) {
+  const setCookie = headers?.get?.('set-cookie') || '';
+  const match = setCookie.match(/(?:^|[,;]\s*)(__hub_req=[^;,\s]+)/i)
+    || setCookie.match(/(__hub_req=[^;,\s]+)/i);
+  return match ? match[1] : '';
+}
+
+async function fetchAllPublicBuilds() {
+  // eFHUB protects /api/community/builds with a short-lived __hub_req cookie.
+  // Its own website obtains that cookie from /api/auth/token before requesting builds.
+  const token = await fetchEfhub('https://efhub.com/api/auth/token', {
+    'accept': '*/*',
+    'referer': PROFILE_URL,
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin'
+  });
+
+  if (!(token.ok || token.status === 204)) {
+    throw new Error('eFHUB auth bootstrap HTTP ' + token.status);
+  }
+
+  const cookie = getHubRequestCookie(token.headers);
+  if (!cookie) {
+    throw new Error('eFHUB auth bootstrap did not return __hub_req');
+  }
+
+  const collected = [];
+  let cursor = null;
+  let pages = 0;
+  let lastStatus = 0;
+
+  while (pages < 20) {
+    const url = new URL('https://efhub.com/api/community/builds');
+    url.searchParams.set('userId', USER_ID);
+    url.searchParams.set('locale', 'es');
+    if (cursor !== null && cursor !== undefined && cursor !== '') {
+      url.searchParams.set('cursor', String(cursor));
+    }
+
+    const r = await fetchEfhub(url.toString(), {
+      'accept': 'application/json,text/plain,*/*',
+      'referer': PROFILE_URL,
+      'cookie': cookie,
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-origin'
+    });
+
+    lastStatus = r.status;
+    if (!r.ok) throw new Error('eFHUB builds HTTP ' + r.status);
+
+    let payload;
+    try {
+      payload = JSON.parse(r.body);
+    } catch(e) {
+      throw new Error('eFHUB builds returned invalid JSON');
+    }
+
+    if (Array.isArray(payload.builds)) collected.push(...payload.builds);
+    pages += 1;
+
+    if (!payload.hasMore || payload.nextCursor === null || payload.nextCursor === undefined) break;
+    cursor = payload.nextCursor;
+  }
+
+  collected.sort((a,b) =>
+    Number(b?.savedAt?.seconds || 0) - Number(a?.savedAt?.seconds || 0)
+  );
+
+  return {
+    builds: collected,
+    pages,
+    status: lastStatus,
+    authStatus: token.status
+  };
 }
 
 export default async function handler(req, res) {
@@ -241,27 +322,26 @@ export default async function handler(req, res) {
 
   if (req.query && req.query.mode === 'builds') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    const url = `https://efhub.com/api/community/builds?userId=${USER_ID}&locale=es`;
 
     try {
-      const r = await fetchEfhub(url);
-      const data = r.ok ? extractBuildData(r.body) : {
-        builds:{}, portableBuilds:{}, booster2ByPlayer:{}
-      };
+      const feed = await fetchAllPublicBuilds();
+      const data = extractBuildData(JSON.stringify({builds:feed.builds}));
 
-      return res.status(r.ok ? 200 : r.status).json({
+      return res.status(200).json({
         userId: USER_ID,
         count: Object.keys(data.builds).length,
+        rawCount: feed.builds.length,
+        pages: feed.pages,
         portableCount: Object.keys(data.portableBuilds).length,
         booster2Count: Object.keys(data.booster2ByPlayer).length,
         builds: data.builds,
         portableBuilds: data.portableBuilds,
         booster2ByPlayer: data.booster2ByPlayer,
         source: {
-          url,
-          ok: r.ok,
-          status: r.status,
-          bytes: r.body.length
+          url: 'https://efhub.com/api/community/builds',
+          ok: true,
+          status: feed.status,
+          authStatus: feed.authStatus
         }
       });
     } catch (e) {
@@ -269,6 +349,8 @@ export default async function handler(req, res) {
         error: String(e && e.message || e),
         userId: USER_ID,
         count: 0,
+        rawCount: 0,
+        pages: 0,
         portableCount: 0,
         booster2Count: 0,
         builds: {},
