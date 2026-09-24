@@ -533,7 +533,7 @@ const CUSTOM_BUILD_URLS = {
   "88036360586198": "https://efhub.com/es/players/88036360586198?build=88036360586198_10_0_5_0_4_12_0_0_0_7_12&userId=116014046796435242846",
   "88040387251721": "https://efhub.com/es/players/88040387251721?build=88040387251721_8_0_5_0_5_12_0_0_0_10_12&userId=116014046796435242846",
   "89138556701095": "https://efhub.com/es/players/89138556701095?build=89138556701095_10_0_4_0_6_12_2_0_0_6_12&userId=116014046796435242846",
-  "88045755964140": "https://efhub.com/es/players/88045755964140?build=88045755964140_8_0_8_0_0_12_0_0_0_10_12&userId=116014046796435242846",
+  "88045755964140": "https://efhub.com/es/players/88045755964140?build=88045755964140_8_0_6_0_4_12_0_0_0_10_12&userId=116014046796435242846",
   "89138556572074": "https://efhub.com/es/players/89138556572074?build=89138556572074_5_0_11_0_6_10_1_0_0_6_12&userId=116014046796435242846",
   "88040387119642": "https://efhub.com/es/players/88040387119642?build=88040387119642_6_1_9_0_6_8_3_0_0_9_12&userId=116014046796435242846",
   "88039045074371": "https://efhub.com/es/players/88039045074371?build=88039045074371_5_0_9_0_9_10_0_0_0_7_8&userId=116014046796435242846",
@@ -551,7 +551,7 @@ for (const playerId of Object.keys(CUSTOM_BUILD_URLS)) {
 // Sincronización automática de builds públicas de ChuPiNho.
 // eFHUB carga esta información desde /api/community/builds al abrir la pestaña Builds.
 try {
-  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v5') || 'null');
+  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v6') || 'null');
   if (cached && typeof cached === 'object' && !Array.isArray(cached)) {
     for (const [playerId, url] of Object.entries(cached)) {
       CUSTOM_BUILD_URLS[playerId] = withManager(url);
@@ -578,7 +578,7 @@ async function syncPublicBuilds() {
         CUSTOM_BUILD_URLS[playerId] = withManager(url);
       }
       try {
-        localStorage.setItem('efhub_public_builds_v5', JSON.stringify(incoming));
+        localStorage.setItem('efhub_public_builds_v6', JSON.stringify(incoming));
       } catch(e) {}
     }
 
@@ -1008,7 +1008,7 @@ document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(
 document.getElementById('forceBtn')?.addEventListener('click', ()=>{
   try {
     localStorage.removeItem('efhub_live_data_v13_profiles');
-    localStorage.removeItem('efhub_public_builds_v5');
+    localStorage.removeItem('efhub_public_builds_v6');
   } catch(e) {}
   syncFromEfhub(true);
 });
