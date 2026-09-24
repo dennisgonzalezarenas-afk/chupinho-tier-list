@@ -306,9 +306,60 @@ body.single .hero p{display:none}
   .actions-panel{width:calc(100vw - 18px)}
   .categories-panel{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+.build-picker-overlay{
+  position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;
+  padding:18px;background:rgba(3,7,16,.78);backdrop-filter:blur(10px);
+}
+.build-picker-overlay.open{display:flex}
+.build-picker{
+  width:min(520px,100%);max-height:min(78vh,720px);overflow:auto;
+  border:1px solid rgba(255,255,255,.12);border-radius:18px;
+  background:linear-gradient(145deg,rgba(15,24,42,.98),rgba(24,12,30,.98));
+  box-shadow:0 28px 80px rgba(0,0,0,.58);padding:18px;
+}
+.build-picker-head{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.build-picker-title{font-family:Orbitron,Montserrat,sans-serif;font-size:18px;font-weight:800;color:#fff}
+.build-picker-sub{margin-top:4px;color:#9eabc0;font-size:12px}
+.build-picker-close{
+  flex:0 0 auto;width:34px;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.06);color:#fff;font-size:20px;line-height:1;cursor:pointer
+}
+.build-picker-list{display:grid;gap:9px}
+.build-choice{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;text-align:left;
+  padding:12px 14px;border-radius:13px;border:1px solid rgba(255,255,255,.09);
+  background:rgba(255,255,255,.045);color:#fff;cursor:pointer;transition:.16s ease;
+}
+.build-choice:hover{transform:translateY(-1px);border-color:rgba(179,255,3,.48);background:rgba(179,255,3,.07)}
+.build-choice-main{min-width:0}
+.build-choice-name{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.build-choice-meta{margin-top:4px;color:#96a3b8;font-size:11px}
+.build-choice-arrow{font-size:18px;color:#b3ff03}
+.build-choice-latest{color:#b3ff03;font-weight:800}
+@media (max-width:620px){
+  .build-picker-overlay{padding:12px}
+  .build-picker{padding:15px;border-radius:16px}
+  .build-picker-title{font-size:16px}
+}
+
 </style>
 </head>
 <body>
+
+<div class="build-picker-overlay" id="buildPickerOverlay" aria-hidden="true">
+  <div class="build-picker" role="dialog" aria-modal="true" aria-labelledby="buildPickerTitle">
+    <div class="build-picker-head">
+      <div>
+        <div class="build-picker-title" id="buildPickerTitle">Selecciona una build</div>
+        <div class="build-picker-sub" id="buildPickerSub"></div>
+      </div>
+      <button class="build-picker-close" id="buildPickerClose" type="button" aria-label="Cerrar">×</button>
+    </div>
+    <div class="build-picker-list" id="buildPickerList"></div>
+  </div>
+</div>
+
 <div class="controls" id="controls">
   <div class="toolbar-main">
     <button id="categoriesToggle" class="toolbar-toggle" aria-expanded="false">☰ Categorías</button>
@@ -397,6 +448,8 @@ function withManager(url) {
 // Builds públicas de ChuPiNho.
 // Este mapa se rellena con los enlaces completos exportados desde eFHUB.
 // Si una carta no tiene build guardada, se abre su ficha normal.
+const CUSTOM_BUILD_OPTIONS = {};
+
 const CUSTOM_BUILD_URLS = {
   "106783356096959": "https://efhub.com/es/players/106783356096959?build=106783356096959_0_0_0_0_0_0_9_10_11_0_0&userId=116014046796435242846",
   "105705050796264": "https://efhub.com/es/players/105705050796264?build=105705050796264_0_0_0_0_1_0_6_8_9_0_0&userId=116014046796435242846",
@@ -549,12 +602,21 @@ for (const playerId of Object.keys(CUSTOM_BUILD_URLS)) {
 }
 
 // Sincronización automática de builds públicas de ChuPiNho.
-// eFHUB carga esta información desde /api/community/builds al abrir la pestaña Builds.
+// Si una carta tiene varias builds, conservamos todas y mostramos un selector.
 try {
-  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v6') || 'null');
+  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v7') || 'null');
   if (cached && typeof cached === 'object' && !Array.isArray(cached)) {
-    for (const [playerId, url] of Object.entries(cached)) {
+    const cachedBuilds = cached.builds && typeof cached.builds === 'object' ? cached.builds : {};
+    const cachedOptions = cached.options && typeof cached.options === 'object' ? cached.options : {};
+    for (const [playerId, url] of Object.entries(cachedBuilds)) {
       CUSTOM_BUILD_URLS[playerId] = withManager(url);
+    }
+    for (const [playerId, list] of Object.entries(cachedOptions)) {
+      if (!Array.isArray(list)) continue;
+      CUSTOM_BUILD_OPTIONS[playerId] = list.map(item => ({
+        ...item,
+        url: withManager(item.url)
+      }));
     }
   }
 } catch(e) {}
@@ -565,20 +627,33 @@ async function syncPublicBuilds() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
 
     const payload = await r.json();
-    const legacy = payload && payload.builds && typeof payload.builds === 'object'
+    const incoming = payload && payload.builds && typeof payload.builds === 'object'
       ? payload.builds
       : {};
-    // eFHUB resolves the saved public build (including its second booster)
-    // through build + userId. Individual progression parameters lose that context.
-    const incoming = legacy;
+    const options = payload && payload.buildOptions && typeof payload.buildOptions === 'object'
+      ? payload.buildOptions
+      : {};
 
     const count = Object.keys(incoming).length;
     if (count > 0) {
       for (const [playerId, url] of Object.entries(incoming)) {
         CUSTOM_BUILD_URLS[playerId] = withManager(url);
       }
+
+      for (const key of Object.keys(CUSTOM_BUILD_OPTIONS)) delete CUSTOM_BUILD_OPTIONS[key];
+      for (const [playerId, list] of Object.entries(options)) {
+        if (!Array.isArray(list)) continue;
+        CUSTOM_BUILD_OPTIONS[playerId] = list.map(item => ({
+          ...item,
+          url: withManager(item.url)
+        }));
+      }
+
       try {
-        localStorage.setItem('efhub_public_builds_v6', JSON.stringify(incoming));
+        localStorage.setItem('efhub_public_builds_v7', JSON.stringify({
+          builds: incoming,
+          options
+        }));
       } catch(e) {}
     }
 
@@ -607,13 +682,84 @@ function efhubPlayerIdFromCard(card) {
   return null;
 }
 
+const buildPickerOverlay = document.getElementById('buildPickerOverlay');
+const buildPickerTitle = document.getElementById('buildPickerTitle');
+const buildPickerSub = document.getElementById('buildPickerSub');
+const buildPickerList = document.getElementById('buildPickerList');
+const buildPickerClose = document.getElementById('buildPickerClose');
+
+function closeBuildPicker() {
+  buildPickerOverlay?.classList.remove('open');
+  buildPickerOverlay?.setAttribute('aria-hidden','true');
+}
+
+function openBuildPicker(playerName, options) {
+  if (!buildPickerOverlay || !buildPickerList) return;
+
+  buildPickerTitle.textContent = playerName || 'Selecciona una build';
+  buildPickerSub.textContent = options.length + ' builds públicas disponibles';
+  buildPickerList.innerHTML = '';
+
+  options.forEach((item, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'build-choice';
+
+    const name = String(item.buildName || ('Build ' + (index + 1)));
+    const pieces = [];
+    if (item.overall) pieces.push('OVR ' + item.overall);
+    if (item.booster2 !== null && item.booster2 !== undefined) pieces.push('2.º booster: ' + item.booster2);
+    if (index === 0) pieces.push('Más reciente');
+
+    button.innerHTML =
+      '<span class="build-choice-main">' +
+        '<span class="build-choice-name">' + esc(name) + '</span>' +
+        '<span class="build-choice-meta">' +
+          pieces.map((part,i) => i === pieces.length - 1 && index === 0
+            ? '<span class="build-choice-latest">' + esc(part) + '</span>'
+            : esc(part)
+          ).join(' · ') +
+        '</span>' +
+      '</span>' +
+      '<span class="build-choice-arrow">↗</span>';
+
+    button.addEventListener('click', () => {
+      const target = withManager(item.url);
+      closeBuildPicker();
+      window.open(target, '_blank', 'noopener,noreferrer');
+    });
+    buildPickerList.appendChild(button);
+  });
+
+  buildPickerOverlay.classList.add('open');
+  buildPickerOverlay.setAttribute('aria-hidden','false');
+}
+
+buildPickerClose?.addEventListener('click', closeBuildPicker);
+buildPickerOverlay?.addEventListener('click', e => {
+  if (e.target === buildPickerOverlay) closeBuildPicker();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeBuildPicker();
+});
+
 function openCard(card) {
   if (!card || !app.contains(card)) return;
 
   const playerId = efhubPlayerIdFromCard(card);
   if (!playerId) return;
 
-  const target = CUSTOM_BUILD_URLS[playerId] || (EFHUB_PLAYER_BASE + playerId);
+  const options = CUSTOM_BUILD_OPTIONS[playerId] || [];
+  if (options.length > 1) {
+    const playerName = card.querySelector('.name')?.textContent?.trim() || options[0]?.playerName || '';
+    openBuildPicker(playerName, options);
+    return;
+  }
+
+  const target = options.length === 1
+    ? withManager(options[0].url)
+    : (CUSTOM_BUILD_URLS[playerId] || (EFHUB_PLAYER_BASE + playerId));
+
   window.open(target, '_blank', 'noopener,noreferrer');
 }
 app.addEventListener('dblclick', (event) => {
@@ -1058,6 +1204,7 @@ document.getElementById('forceBtn')?.addEventListener('click', ()=>{
   try {
     localStorage.removeItem('efhub_live_data_v15_12lists');
     localStorage.removeItem('efhub_public_builds_v6');
+    localStorage.removeItem('efhub_public_builds_v7');
   } catch(e) {}
   syncFromEfhub(true);
 });
