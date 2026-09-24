@@ -527,6 +527,39 @@ const CUSTOM_BUILD_URLS = {
   "88044145217198": "https://efhub.com/es/players/88044145217198?build=88044145217198_8_4_5_0_9_8_0_0_0_9_8&userId=116014046796435242846"
 };
 
+// Sincronización automática de builds públicas de ChuPiNho.
+// eFHUB carga esta información desde /api/community/builds al abrir la pestaña Builds.
+try {
+  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v2') || 'null');
+  if (cached && typeof cached === 'object' && !Array.isArray(cached)) {
+    Object.assign(CUSTOM_BUILD_URLS, cached);
+  }
+} catch(e) {}
+
+async function syncPublicBuilds() {
+  try {
+    const r = await fetch('/api/efhub?mode=builds&t=' + Date.now(), {cache:'no-store'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const payload = await r.json();
+    const incoming = payload && payload.builds && typeof payload.builds === 'object'
+      ? payload.builds
+      : {};
+
+    const count = Object.keys(incoming).length;
+    if (count > 0) {
+      Object.assign(CUSTOM_BUILD_URLS, incoming);
+      try {
+        localStorage.setItem('efhub_public_builds_v2', JSON.stringify(incoming));
+      } catch(e) {}
+    }
+
+    return count;
+  } catch(e) {
+    return 0;
+  }
+}
+
 function efhubPlayerIdFromCard(card) {
   const img = card?.querySelector('img');
   if (!img) return null;
@@ -903,7 +936,10 @@ async function syncFromEfhub(manual=false) {
   if (btn) { btn.disabled = true; btn.textContent = 'Actualizando…'; }
   if (status) status.textContent = 'Leyendo la lista actual…';
   try {
-    const source = await getLiveSource();
+    const [source, buildCount] = await Promise.all([
+      getLiveSource(),
+      syncPublicBuilds()
+    ]);
     const players = source.players || extractPlayers(source.raw);
     const live = splitLivePlayers(players);
     const count = totalPlayers(live);
@@ -912,7 +948,9 @@ async function syncFromEfhub(manual=false) {
     render();
     document.querySelectorAll('.card img').forEach(attachFallback);
     try { localStorage.setItem('efhub_live_data_v13_profiles', JSON.stringify(DATA)); } catch(e) {}
-    if (status) status.textContent = `${count} cartas sincronizadas · ${source.via}`;
+    if (status) status.textContent = buildCount > 0
+      ? `${count} cartas · ${Object.keys(CUSTOM_BUILD_URLS).length} builds · ${source.via}`
+      : `${count} cartas sincronizadas · ${source.via}`;
     if (badge) { badge.textContent='Sincronizada ahora'; badge.style.color='#67d391'; }
     return true;
   } catch(e) {
@@ -938,6 +976,8 @@ try {
 } catch(e) {}
 if (new URLSearchParams(location.search).get('nosync') !== '1') {
   setTimeout(()=>syncFromEfhub(false), 100);
+} else {
+  setTimeout(()=>syncPublicBuilds(), 100);
 }
 
 
