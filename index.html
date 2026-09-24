@@ -551,7 +551,7 @@ for (const playerId of Object.keys(CUSTOM_BUILD_URLS)) {
 // Sincronización automática de builds públicas de ChuPiNho.
 // eFHUB carga esta información desde /api/community/builds al abrir la pestaña Builds.
 try {
-  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v2') || 'null');
+  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v3') || 'null');
   if (cached && typeof cached === 'object' && !Array.isArray(cached)) {
     for (const [playerId, url] of Object.entries(cached)) {
       CUSTOM_BUILD_URLS[playerId] = withManager(url);
@@ -576,7 +576,7 @@ async function syncPublicBuilds() {
       }
       try {
         localStorage.setItem(
-          'efhub_public_builds_v2',
+          'efhub_public_builds_v3',
           JSON.stringify(Object.fromEntries(
             Object.entries(incoming).map(([playerId, url]) => [playerId, withManager(url)])
           ))
@@ -616,8 +616,9 @@ app.addEventListener('dblclick', (event) => {
   const playerId = efhubPlayerIdFromCard(card);
   if (!playerId) return;
 
+  const buildUrl = CUSTOM_BUILD_URLS[playerId];
   window.open(
-    CUSTOM_BUILD_URLS[playerId] || (EFHUB_PLAYER_BASE + playerId),
+    buildUrl ? withManager(buildUrl) : (EFHUB_PLAYER_BASE + playerId),
     '_blank',
     'noopener,noreferrer'
   );
@@ -996,7 +997,7 @@ document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(
 document.getElementById('forceBtn')?.addEventListener('click', ()=>{
   try {
     localStorage.removeItem('efhub_live_data_v13_profiles');
-    localStorage.removeItem('efhub_public_builds_v2');
+    localStorage.removeItem('efhub_public_builds_v3');
   } catch(e) {}
   syncFromEfhub(true);
 });
