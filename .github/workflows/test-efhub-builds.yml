@@ -17,18 +17,10 @@ jobs:
           set -euo pipefail
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
           PROFILE='https://efhub.com/es/community/116014046796435242846'
-          curl --max-time 20 -fsSL -A "$UA" "$PROFILE" -o /tmp/profile.html
+          curl --max-time 15 -fsSL -A "$UA" "$PROFILE" -o /tmp/profile.html
           mkdir -p /tmp/chunks
           grep -oE 'src="/_next/static/chunks/[^"]+\.js[^"]*"' /tmp/profile.html             | sed -E 's/^src="//;s/"$//' | sort -u > /tmp/chunk-urls.txt
           echo "chunks: $(wc -l </tmp/chunk-urls.txt)"
-          n=0
-          while IFS= read -r path; do
-            n=$((n+1))
-            curl --max-time 20 -fsSL -A "$UA" "https://efhub.com$path" -o "/tmp/chunks/$n.js" || true
-          done < /tmp/chunk-urls.txt
-          echo '--- files with community/builds ---'
-          grep -l -E '/api/community/builds|community/builds' /tmp/chunks/*.js || true
-          echo '--- relevant snippets ---'
-          grep -h -oE '.{0,700}(/api/community/builds|community/builds).{0,1400}' /tmp/chunks/*.js | head -n 20 || true
-          echo '--- Forbidden/auth/header snippets ---'
-          grep -h -oE '.{0,500}(Forbidden|Authorization|x-api|apiKey|firebase|token|Bearer).{0,900}' /tmp/chunks/*.js | head -n 30 || true
+          awk '{print NR "\t" $0}' /tmp/chunk-urls.txt > /tmp/numbered.txt
+          cat /tmp/numbered.txt | xargs -P 8 -n 2 sh -c 'curl --max-time 8 -fsSL -A "'"$UA"'" "https://efhub.com$2" -o "/tmp/chunks/$1.js" || true' sh
+          python -c "from pathlib import Path; files=list(Path('/tmp/chunks').glob('*.js')); print('downloaded',len(files)); hits=[]; for p in files:  s=p.read_text(errors='ignore');  [hits.append((p.name,n,s.find(n))) for n in ['/api/community/builds','community/builds'] if n in s]; print('hits',hits); [(lambda s,i,n: print('SNIP',p.name,n,s[max(0,i-900):i+2400]))(p.read_text(errors='ignore'),p.read_text(errors='ignore').find(n),n) for p in files for n in ['/api/community/builds','community/builds'] if n in p.read_text(errors='ignore')]"
