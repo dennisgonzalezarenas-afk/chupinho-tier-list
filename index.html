@@ -963,7 +963,13 @@ async function syncFromEfhub(manual=false) {
   }
 }
 document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(true));
-document.getElementById('forceBtn')?.addEventListener('click', ()=>{ try{localStorage.removeItem('efhub_live_data_v13_profiles')}catch(e){}; syncFromEfhub(true); });
+document.getElementById('forceBtn')?.addEventListener('click', ()=>{
+  try {
+    localStorage.removeItem('efhub_live_data_v13_profiles');
+    localStorage.removeItem('efhub_public_builds_v2');
+  } catch(e) {}
+  syncFromEfhub(true);
+});
 
 // If a previous live sync exists, show it immediately, then refresh from eFHUB.
 try {
