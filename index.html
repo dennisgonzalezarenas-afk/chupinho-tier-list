@@ -637,7 +637,7 @@ app.addEventListener('dblclick', (event) => {
     if (opened) {
       setTimeout(() => {
         try {
-          opened.location.href = buildUrl;
+          opened.location.href = withManager(buildUrl);
           opened.focus();
         } catch(e) {
           window.open(withManager(buildUrl), '_blank', 'noopener,noreferrer');
