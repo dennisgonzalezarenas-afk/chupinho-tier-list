@@ -11,27 +11,29 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Test browser-like session
+      - name: Inspect public profile HTML
         shell: bash
         run: |
           set -euo pipefail
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
           PROFILE='https://efhub.com/es/community/116014046796435242846'
-          API='https://efhub.com/api/community/builds?userId=116014046796435242846&locale=es'
-
-          echo '--- profile ---'
-          curl -sS -D /tmp/profile.headers -c /tmp/cookies.txt             -A "$UA"             -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'             -H 'Accept-Language: es-ES,es;q=0.9,en;q=0.7'             "$PROFILE" -o /tmp/profile.html
-          head -n 20 /tmp/profile.headers
+          curl -fsSL -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' "$PROFILE" -o /tmp/profile.html
           echo "profile bytes: $(wc -c </tmp/profile.html)"
-          echo 'cookies:'
-          cat /tmp/cookies.txt || true
-
-          echo '--- api same session ---'
-          code=$(curl -sS -w '%{http_code}' -o /tmp/builds.json             -b /tmp/cookies.txt -c /tmp/cookies.txt             -A "$UA"             -H 'Accept: application/json,text/plain,*/*'             -H 'Accept-Language: es-ES,es;q=0.9,en;q=0.7'             -H "Referer: $PROFILE"             -H 'Origin: https://efhub.com'             -H 'Sec-Fetch-Dest: empty'             -H 'Sec-Fetch-Mode: cors'             -H 'Sec-Fetch-Site: same-origin'             "$API")
-          echo "api status: $code"
-          echo "api bytes: $(wc -c </tmp/builds.json)"
-          head -c 1200 /tmp/builds.json; echo
-
-          echo '--- detected build strings ---'
-          grep -oE '[0-9]{10,}(_[0-9]+){11}' /tmp/builds.json | head -n 5 || true
-          echo "build count: $(grep -oE '[0-9]{10,}(_[0-9]+){11}' /tmp/builds.json | sort -u | wc -l | tr -d ' ')"
+          echo "build strings: $(grep -oE '[0-9]{10,}(_[0-9]+){11}' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
+          echo "player build urls: $(grep -oE 'players/[0-9]+[^" ]*build=[0-9_]+' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
+          echo "api endpoint mentions: $(grep -o '/api/community/builds[^" <]*' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
+          echo '--- build-related snippets ---'
+          python - <<'PY'
+from pathlib import Path
+s=Path('/tmp/profile.html').read_text(errors='ignore')
+for needle in ['Builds','builds','/api/community/builds','community/build','build=','userBuild']:
+    print('\nNEEDLE',needle)
+    start=0
+    shown=0
+    while shown<5:
+        i=s.find(needle,start)
+        if i<0: break
+        print(s[max(0,i-700):i+1300].replace('\n',' ')[:2000])
+        start=i+len(needle)
+        shown+=1
+PY
