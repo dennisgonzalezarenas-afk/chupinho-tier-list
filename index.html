@@ -635,7 +635,21 @@ app.addEventListener('touchend', (event) => {
   }
 }, {passive:false});
 
-const SOURCE_URL = 'https://efhub.com/es/tier-list/116014046796435242846_f1163d0a-6eed-4b91-92f3-2b925fe7eee7';
+const SOURCE_URLS = [
+  "https://efhub.com/es/tier-list/116014046796435242846_cf4606d9-9aac-4658-9f5e-e8a3b9bc0a13",
+  "https://efhub.com/es/tier-list/116014046796435242846_27a1df05-c04d-4130-b138-35e85a1bc0d0",
+  "https://efhub.com/es/tier-list/116014046796435242846_ee5b5025-17ee-4af2-a6a6-24ba5ea2c71d",
+  "https://efhub.com/es/tier-list/116014046796435242846_b5fe2af3-fa77-4041-80b1-0d455fef9e4a",
+  "https://efhub.com/es/tier-list/116014046796435242846_256dd05d-39af-4aa4-89b1-75058c193c1f",
+  "https://efhub.com/es/tier-list/116014046796435242846_40003376-ae79-470b-bfb4-b069ea25f272",
+  "https://efhub.com/es/tier-list/116014046796435242846_78046652-98a8-48eb-9140-b25e37781b9c",
+  "https://efhub.com/es/tier-list/116014046796435242846_8787408d-e9c5-4a33-8690-8aec8605aba2",
+  "https://efhub.com/es/tier-list/116014046796435242846_c33fc4ce-0afa-45de-b407-fbbc713d1125",
+  "https://efhub.com/es/tier-list/116014046796435242846_c1005476-a159-482d-9ac4-6b42d83be5f1",
+  "https://efhub.com/es/tier-list/116014046796435242846_0e2075d3-d3b3-4ed7-8c3a-7804e869aa11",
+  "https://efhub.com/es/tier-list/116014046796435242846_c8204e72-a8eb-455c-b97a-59d131dc6348"
+];
+const SOURCE_URL = SOURCE_URLS[0];
 
 
 function esc(s) {
@@ -947,6 +961,33 @@ function splitLivePlayers(players) {
 
   return template;
 }
+function categoriesFromSourceLists(groups) {
+  const template = FALLBACK_DATA.map(c => ({
+    id: c.id,
+    name: c.name,
+    accent: c.accent,
+    players: []
+  }));
+  const fallbackPool = FALLBACK_DATA.flatMap(c => c.players);
+
+  for (let i = 0; i < template.length; i++) {
+    const sourcePlayers = Array.isArray(groups[i]) ? groups[i] : [];
+    template[i].players = sourcePlayers.map(p => {
+      const same = fallbackPool.find(x => x.img === p.img)
+        || fallbackPool.find(x => normalizeName(x.name) === normalizeName(p.name) && x.rating === p.rating && x.pos === p.pos)
+        || fallbackPool.find(x => normalizeName(x.name) === normalizeName(p.name));
+      return {
+        name: p.name,
+        rating: p.rating || same?.rating || '',
+        pos: p.pos || same?.pos || '',
+        img: p.img || same?.img || ''
+      };
+    });
+  }
+
+  return template;
+}
+
 function totalPlayers(data) {
   return data.reduce((n,c)=>n+c.players.length,0);
 }
@@ -961,13 +1002,22 @@ async function fetchWithTimeout(url, ms=15000) {
 }
 
 async function getLiveSource() {
-  const txt = await fetchWithTimeout('/api/efhub?t=' + Date.now(), 22000);
-  const players = extractPlayers(txt);
-  const tiers = ['S+','S','A','B','C','D','E'];
-  if (!tiers.every(tier => players.some(p => p.tier === tier))) {
-    throw new Error('La respuesta de eFHUB no contiene todas las filas.');
+  const raws = await Promise.all(
+    SOURCE_URLS.map((_, i) =>
+      fetchWithTimeout('/api/efhub?mode=list&id=' + (i + 1) + '&t=' + Date.now(), 22000)
+    )
+  );
+
+  const groups = raws.map(raw => extractPlayers(raw));
+  const empty = groups
+    .map((players, i) => ({id:i + 1, count:players.length}))
+    .filter(x => x.count === 0);
+
+  if (empty.length) {
+    throw new Error('No se pudieron reconocer cartas en las listas: ' + empty.map(x => x.id).join(', '));
   }
-  return {raw: txt, via: 'eFHUB directo', players};
+
+  return {raws, groups, via:'12 listas eFHUB'};
 }
 
 async function syncFromEfhub(manual=false) {
@@ -976,23 +1026,22 @@ async function syncFromEfhub(manual=false) {
   const badge = document.getElementById('liveBadge');
   const old = btn?.textContent;
   if (btn) { btn.disabled = true; btn.textContent = 'Actualizando…'; }
-  if (status) status.textContent = 'Leyendo la lista actual…';
+  if (status) status.textContent = 'Leyendo las 12 listas…';
   try {
     const [source, buildCount] = await Promise.all([
       getLiveSource(),
       syncPublicBuilds()
     ]);
-    const players = source.players || extractPlayers(source.raw);
-    const live = splitLivePlayers(players);
+    const live = categoriesFromSourceLists(source.groups);
     const count = totalPlayers(live);
     if (count < 20) throw new Error('La página se recibió, pero no se pudieron reconocer las cartas.');
     DATA = live;
     render();
     document.querySelectorAll('.card img').forEach(attachFallback);
-    try { localStorage.setItem('efhub_live_data_v13_profiles', JSON.stringify(DATA)); } catch(e) {}
+    try { localStorage.setItem('efhub_live_data_v14_12lists', JSON.stringify(DATA)); } catch(e) {}
     if (status) status.textContent = buildCount > 0
-      ? `${count} cartas · ${Object.keys(CUSTOM_BUILD_URLS).length} builds · ${source.via}`
-      : `${count} cartas sincronizadas · ${source.via}`;
+      ? `${count} cartas · 12 listas · ${Object.keys(CUSTOM_BUILD_URLS).length} builds · ${source.via}`
+      : `${count} cartas · 12 listas sincronizadas · ${source.via}`;
     if (badge) { badge.textContent='Sincronizada ahora'; badge.style.color='#67d391'; }
     return true;
   } catch(e) {
@@ -1007,7 +1056,7 @@ async function syncFromEfhub(manual=false) {
 document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(true));
 document.getElementById('forceBtn')?.addEventListener('click', ()=>{
   try {
-    localStorage.removeItem('efhub_live_data_v13_profiles');
+    localStorage.removeItem('efhub_live_data_v14_12lists');
     localStorage.removeItem('efhub_public_builds_v6');
   } catch(e) {}
   syncFromEfhub(true);
@@ -1015,7 +1064,7 @@ document.getElementById('forceBtn')?.addEventListener('click', ()=>{
 
 // If a previous live sync exists, show it immediately, then refresh from eFHUB.
 try {
-  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v13_profiles') || 'null');
+  const saved = JSON.parse(localStorage.getItem('efhub_live_data_v14_12lists') || 'null');
   if (Array.isArray(saved) && totalPlayers(saved) > 20) {
     DATA = saved;
     render();
