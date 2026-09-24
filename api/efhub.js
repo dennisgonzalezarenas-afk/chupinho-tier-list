@@ -49,31 +49,32 @@ export default async function handler(req, res) {
 
   if (req.query && req.query.mode === 'builds') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    const urls = [
-      `https://efhub.com/es/community/${USER_ID}`,
-      `https://efhub.com/es/community/${USER_ID}?tab=builds`
-    ];
+
+    // Endpoint real usado por eFHUB al abrir la pestaña Builds del perfil público.
+    const url = `https://efhub.com/api/community/builds?userId=${USER_ID}&locale=es`;
+
     try {
-      let combined = '';
-      const sources = [];
-      for (const url of urls) {
-        try {
-          const r = await fetchEfhub(url);
-          sources.push({url, ok:r.ok, status:r.status, bytes:r.body.length});
-          if (r.ok) combined += '\n' + r.body;
-        } catch (e) {
-          sources.push({url, ok:false, error:String(e && e.message || e)});
-        }
-      }
-      const builds = extractBuilds(combined);
-      return res.status(200).json({
-        userId:USER_ID,
-        count:Object.keys(builds).length,
+      const r = await fetchEfhub(url);
+      const builds = r.ok ? extractBuilds(r.body) : {};
+
+      return res.status(r.ok ? 200 : r.status).json({
+        userId: USER_ID,
+        count: Object.keys(builds).length,
         builds,
-        sources
+        source: {
+          url,
+          ok: r.ok,
+          status: r.status,
+          bytes: r.body.length
+        }
       });
     } catch (e) {
-      return res.status(502).json({error:String(e && e.message || e), count:0, builds:{}});
+      return res.status(502).json({
+        error: String(e && e.message || e),
+        userId: USER_ID,
+        count: 0,
+        builds: {}
+      });
     }
   }
 
