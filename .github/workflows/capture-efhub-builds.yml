@@ -1,0 +1,33 @@
+name: Capture eFHUB builds raw
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/capture-efhub-builds.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch public eFHUB builds
+        run: |
+          mkdir -p debug
+          curl -fsSL             -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36'             -H 'Accept: application/json,text/plain,*/*'             'https://efhub.com/api/community/builds?userId=116014046796435242846&locale=es'             -o debug/efhub-builds-raw.json
+          python -m json.tool debug/efhub-builds-raw.json >/dev/null
+      - name: Commit capture
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add debug/efhub-builds-raw.json
+          if git diff --cached --quiet; then
+            echo 'No changes'
+          else
+            git commit -m 'Capture raw eFHUB public builds'
+            git push
+          fi
