@@ -11,11 +11,24 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect public profile HTML
+      - name: Inspect eFHUB community JavaScript
         shell: bash
         run: |
           set -euo pipefail
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
           PROFILE='https://efhub.com/es/community/116014046796435242846'
-          curl --max-time 20 -fsSL -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' "$PROFILE" -o /tmp/profile.html
-          python -c "from pathlib import Path; import re; s=Path('/tmp/profile.html').read_text(errors='ignore'); print('bytes',len(s)); print('build_strings',len(set(re.findall(r'[0-9]{10,}(?:_[0-9]+){11}',s)))); print('api_mentions',s.count('/api/community/builds')); print('build_eq',s.count('build=')); print('Builds',s.count('Builds')); print('builds_word',s.count('builds')); [print('SNIP',needle, s[max(0,(i:=s.find(needle))-500):i+1200].replace('\\n',' ')[:1700]) for needle in ['/api/community/builds','Builds','builds','build='] if s.find(needle)>=0]"
+          curl --max-time 20 -fsSL -A "$UA" "$PROFILE" -o /tmp/profile.html
+          mkdir -p /tmp/chunks
+          grep -oE 'src="/_next/static/chunks/[^"]+\.js[^"]*"' /tmp/profile.html             | sed -E 's/^src="//;s/"$//' | sort -u > /tmp/chunk-urls.txt
+          echo "chunks: $(wc -l </tmp/chunk-urls.txt)"
+          n=0
+          while IFS= read -r path; do
+            n=$((n+1))
+            curl --max-time 20 -fsSL -A "$UA" "https://efhub.com$path" -o "/tmp/chunks/$n.js" || true
+          done < /tmp/chunk-urls.txt
+          echo '--- files with community/builds ---'
+          grep -l -E '/api/community/builds|community/builds' /tmp/chunks/*.js || true
+          echo '--- relevant snippets ---'
+          grep -h -oE '.{0,700}(/api/community/builds|community/builds).{0,1400}' /tmp/chunks/*.js | head -n 20 || true
+          echo '--- Forbidden/auth/header snippets ---'
+          grep -h -oE '.{0,500}(Forbidden|Authorization|x-api|apiKey|firebase|token|Bearer).{0,900}' /tmp/chunks/*.js | head -n 30 || true
