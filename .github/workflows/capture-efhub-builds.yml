@@ -17,9 +17,37 @@ jobs:
       - uses: actions/checkout@v4
       - name: Fetch public eFHUB builds
         run: |
+          set -e
           mkdir -p debug
-          curl -fsSL             -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36'             -H 'Accept: application/json,text/plain,*/*'             'https://efhub.com/api/community/builds?userId=116014046796435242846&locale=es'             -o debug/efhub-builds-raw.json
-          python -m json.tool debug/efhub-builds-raw.json >/dev/null
+          TARGET='https://efhub.com/api/community/builds?userId=116014046796435242846&locale=es'
+          ENCODED=$(python - <<'PY'
+import urllib.parse
+print(urllib.parse.quote('https://efhub.com/api/community/builds?userId=116014046796435242846&locale=es', safe=''))
+PY
+          )
+
+          ok=0
+
+          if curl -fsSL -A 'Mozilla/5.0' "https://api.allorigins.win/raw?url=$ENCODED" -o debug/efhub-builds-raw.json; then
+            if python -m json.tool debug/efhub-builds-raw.json >/dev/null 2>&1; then
+              ok=1
+            fi
+          fi
+
+          if [ "$ok" -ne 1 ]; then
+            rm -f debug/efhub-builds-raw.json
+            if curl -fsSL -A 'Mozilla/5.0' "https://r.jina.ai/http://https://efhub.com/api/community/builds?userId=116014046796435242846&locale=es" -o debug/efhub-builds-raw.json; then
+              if python -m json.tool debug/efhub-builds-raw.json >/dev/null 2>&1; then
+                ok=1
+              fi
+            fi
+          fi
+
+          if [ "$ok" -ne 1 ]; then
+            echo "Could not obtain valid JSON through proxies"
+            exit 1
+          fi
+
       - name: Commit capture
         run: |
           git config user.name 'github-actions[bot]'
