@@ -1,35 +1,31 @@
-name: Test eFHUB public builds access
+name: Verify eFHUB build sync
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
+      - 'api/efhub.js'
+      - 'index.html'
       - '.github/workflows/test-efhub-builds.yml'
 
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Test eFHUB auth bootstrap then builds
+      - name: Verify production build feed
         shell: bash
         run: |
           set -euo pipefail
-          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
-          BASE='https://efhub.com'
-          PROFILE="$BASE/es/community/116014046796435242846"
-          JAR=/tmp/cookies.txt
-
-          req () {
-            name="$1"; url="$2"
-            code=$(curl --max-time 20 -sS -w '%{http_code}' -o "/tmp/$name.out"               -c "$JAR" -b "$JAR"               -A "$UA"               -H 'Accept-Language: es-ES,es;q=0.9,en;q=0.7'               -H "Referer: $PROFILE"               "$url")
-            echo "$name status=$code bytes=$(wc -c <"/tmp/$name.out")"
-            head -c 1200 "/tmp/$name.out"; echo
-            echo "cookies after $name:"; cat "$JAR" || true
-          }
-
-          req profile "$PROFILE"
-          req auth_token "$BASE/api/auth/token"
-          req auth_session "$BASE/api/auth/session"
-          req builds "$BASE/api/community/builds?userId=116014046796435242846&locale=es"
-          echo "build strings: $(grep -oE '[0-9]{10,}(_[0-9]+){11}' /tmp/builds.out | sort -u | wc -l | tr -d ' ')"
+          URL='https://chupinho-tier-list.vercel.app/api/efhub?mode=builds'
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            echo "Attempt $attempt"
+            if curl --max-time 25 -fsSL "$URL&t=$(date +%s)" -o /tmp/builds.json; then
+              python -c "import json; d=json.load(open('/tmp/builds.json')); print('count',d.get('count')); print('pages',d.get('pages')); print('source_status',d.get('source',{}).get('status')); print('has_endrick','106776376796960' in d.get('builds',{})); print('has_pato','88038776539586' in d.get('builds',{})); assert d.get('count',0) > 20"
+              ok=1
+              break
+            fi
+            sleep 8
+          done
+          test "$ok" -eq 1
