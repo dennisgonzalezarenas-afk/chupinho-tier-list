@@ -1,4 +1,7 @@
 const USER_ID = '116014046796435242846';
+const MANAGER_ID = '17605071047055';
+const MANAGER_SKILL = 'PossessionGame';
+const MANAGER_VALUE = '89';
 
 function normalizeBody(body) {
   return String(body || '')
@@ -18,7 +21,7 @@ function extractBuilds(text) {
     if (!build || !/^\d{10,}(?:_\d+)+$/.test(build)) return;
     const playerId = build.split('_')[0];
     if (!builds[playerId]) {
-      builds[playerId] = `https://efhub.com/es/players/${playerId}?build=${build}&userId=${USER_ID}`;
+      builds[playerId] = `https://efhub.com/es/players/${playerId}?build=${build}&userId=${USER_ID}&mgr=${MANAGER_ID}&msk=${MANAGER_SKILL}&msv=${MANAGER_VALUE}`;
     }
   };
 
