@@ -1,0 +1,32 @@
+name: Verify 12 eFHUB lists
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-tier-sources.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Vercel production
+        run: sleep 15
+      - name: Verify list endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          total=0
+          for i in $(seq 1 12); do
+            url="https://chupinho-tier-list.vercel.app/api/efhub?mode=list&id=$i"
+            body="$(curl -fsSL --retry 3 --retry-delay 2 "$url")"
+            count="$(printf '%s' "$body" | grep -oE 'player_cards/[0-9]+' | sed 's#player_cards/##' | sort -u | wc -l | tr -d ' ')"
+            echo "LIST $i: $count unique card ids"
+            if [ "$count" -eq 0 ]; then
+              echo "List $i returned no recognizable cards"
+              exit 1
+            fi
+            total=$((total + count))
+          done
+          echo "TOTAL: $total cards across 12 lists"
