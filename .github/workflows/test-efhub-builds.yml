@@ -11,16 +11,25 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect eFHUB community JavaScript
+      - name: Test eFHUB auth bootstrap then builds
         shell: bash
         run: |
           set -euo pipefail
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
-          PROFILE='https://efhub.com/es/community/116014046796435242846'
-          curl --max-time 15 -fsSL -A "$UA" "$PROFILE" -o /tmp/profile.html
-          mkdir -p /tmp/chunks
-          grep -oE 'src="/_next/static/chunks/[^"]+\.js[^"]*"' /tmp/profile.html             | sed -E 's/^src="//;s/"$//' | sort -u > /tmp/chunk-urls.txt
-          echo "chunks: $(wc -l </tmp/chunk-urls.txt)"
-          awk '{print NR "\t" $0}' /tmp/chunk-urls.txt > /tmp/numbered.txt
-          cat /tmp/numbered.txt | xargs -P 8 -n 2 sh -c 'curl --max-time 8 -fsSL -A "'"$UA"'" "https://efhub.com$2" -o "/tmp/chunks/$1.js" || true' sh
-          python -c "from pathlib import Path; needles=['/api/community/builds','community/builds']; files=list(Path('/tmp/chunks').glob('*.js')); items=[(p.name,n,s.find(n),s) for p in files for s in [p.read_text(errors='ignore')] for n in needles if n in s]; print('downloaded',len(files)); print('hits',[(a,b,c) for a,b,c,_ in items]); [print('SNIP',a,b,s[max(0,i-1000):i+3000]) for a,b,i,s in items]"
+          BASE='https://efhub.com'
+          PROFILE="$BASE/es/community/116014046796435242846"
+          JAR=/tmp/cookies.txt
+
+          req () {
+            name="$1"; url="$2"
+            code=$(curl --max-time 20 -sS -w '%{http_code}' -o "/tmp/$name.out"               -c "$JAR" -b "$JAR"               -A "$UA"               -H 'Accept-Language: es-ES,es;q=0.9,en;q=0.7'               -H "Referer: $PROFILE"               "$url")
+            echo "$name status=$code bytes=$(wc -c <"/tmp/$name.out")"
+            head -c 1200 "/tmp/$name.out"; echo
+            echo "cookies after $name:"; cat "$JAR" || true
+          }
+
+          req profile "$PROFILE"
+          req auth_token "$BASE/api/auth/token"
+          req auth_session "$BASE/api/auth/session"
+          req builds "$BASE/api/community/builds?userId=116014046796435242846&locale=es"
+          echo "build strings: $(grep -oE '[0-9]{10,}(_[0-9]+){11}' /tmp/builds.out | sort -u | wc -l | tr -d ' ')"
