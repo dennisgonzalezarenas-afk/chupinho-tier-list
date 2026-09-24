@@ -17,10 +17,5 @@ jobs:
           set -euo pipefail
           UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
           PROFILE='https://efhub.com/es/community/116014046796435242846'
-          curl -fsSL -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' "$PROFILE" -o /tmp/profile.html
-          echo "profile bytes: $(wc -c </tmp/profile.html)"
-          echo "build strings: $(grep -oE '[0-9]{10,}(_[0-9]+){11}' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
-          echo "player build urls: $(grep -oE 'players/[0-9]+[^" ]*build=[0-9_]+' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
-          echo "api endpoint mentions: $(grep -o '/api/community/builds[^" <]*' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
-          echo "--- lines containing Builds/builds ---"
-          grep -oE '.{0,250}(Builds|builds|/api/community/builds|build=).{0,500}' /tmp/profile.html | head -n 30 || true
+          curl --max-time 20 -fsSL -A "$UA" -H 'Accept-Language: es-ES,es;q=0.9' "$PROFILE" -o /tmp/profile.html
+          python -c "from pathlib import Path; import re; s=Path('/tmp/profile.html').read_text(errors='ignore'); print('bytes',len(s)); print('build_strings',len(set(re.findall(r'[0-9]{10,}(?:_[0-9]+){11}',s)))); print('api_mentions',s.count('/api/community/builds')); print('build_eq',s.count('build=')); print('Builds',s.count('Builds')); print('builds_word',s.count('builds')); [print('SNIP',needle, s[max(0,(i:=s.find(needle))-500):i+1200].replace('\\n',' ')[:1700]) for needle in ['/api/community/builds','Builds','builds','build='] if s.find(needle)>=0]"
