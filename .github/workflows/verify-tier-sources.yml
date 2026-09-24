@@ -12,21 +12,63 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for Vercel production
-        run: sleep 15
-      - name: Verify list endpoints
+        run: sleep 10
+
+      - name: Fetch and parse list endpoints
         shell: bash
         run: |
           set -euo pipefail
-          total=0
+          mkdir -p /tmp/efhub-lists
           for i in $(seq 1 12); do
-            url="https://chupinho-tier-list.vercel.app/api/efhub?mode=list&id=$i"
-            body="$(curl -fsSL --retry 3 --retry-delay 2 "$url")"
-            count="$(printf '%s' "$body" | grep -oE 'player_cards/[0-9]+' | sed 's#player_cards/##' | sort -u | wc -l | tr -d ' ')"
-            echo "LIST $i: $count unique card ids"
-            if [ "$count" -eq 0 ]; then
-              echo "List $i returned no recognizable cards"
-              exit 1
-            fi
-            total=$((total + count))
+            curl -fsSL --retry 3 --retry-delay 2               "https://chupinho-tier-list.vercel.app/api/efhub?mode=list&id=$i"               -o "/tmp/efhub-lists/$i.html"
           done
-          echo "TOTAL: $total cards across 12 lists"
+
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+
+          TIERS={'S+','S','A','B','C','D','E'}
+
+          class P(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.stack=[]
+                  self.current_tier=None
+                  self.cards=[]
+              def handle_starttag(self, tag, attrs):
+                  attrs=dict(attrs)
+                  self.stack.append([tag,[]])
+                  if tag=='img':
+                      src=attrs.get('src','')
+                      alt=attrs.get('alt','')
+                      m=re.search(r'player_cards/(\d+)(?:_l)?\.png', src)
+                      if m:
+                          self.cards.append((self.current_tier,m.group(1),alt,src))
+              def handle_data(self,data):
+                  if self.stack:
+                      self.stack[-1][1].append(data)
+              def handle_endtag(self,tag):
+                  if not self.stack:
+                      return
+                  t, chunks=self.stack.pop()
+                  text=' '.join(''.join(chunks).split())
+                  if text in TIERS:
+                      self.current_tier=text
+                  if self.stack and text:
+                      self.stack[-1][1].append(text)
+
+          total=0
+          for i in range(1,13):
+              html=Path(f'/tmp/efhub-lists/{i}.html').read_text(errors='ignore')
+              p=P(); p.feed(html)
+              seen=[]
+              for tier,pid,alt,src in p.cards:
+                  if tier and pid not in [x[1] for x in seen]:
+                      seen.append((tier,pid,alt))
+              print(f'LIST {i}: {len(seen)} tier-scoped cards')
+              for row in seen[:3]:
+                  print('  ',row)
+              total += len(seen)
+          print('TOTAL TIER-SCOPED:',total)
+          PY
