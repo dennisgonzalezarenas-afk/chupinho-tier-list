@@ -617,15 +617,17 @@ function openCard(card) {
   window.open(target, '_blank', 'noopener,noreferrer');
 }
 app.addEventListener('dblclick', (event) => {
-  if (event.pointerType === 'touch') return;
+  if (Date.now() - lastTouchOpen < 700) return;
   openCard(event.target.closest('.card'));
 });
+let lastTouchOpen = 0;
 let lastTouch = {card:null, time:0};
 app.addEventListener('touchend', (event) => {
   const card = event.target.closest('.card');
   const now = Date.now();
   if (card && lastTouch.card === card && now - lastTouch.time < 450) {
     event.preventDefault();
+    lastTouchOpen = now;
     openCard(card);
     lastTouch = {card:null, time:0};
   } else {
