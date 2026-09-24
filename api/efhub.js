@@ -327,6 +327,27 @@ export default async function handler(req, res) {
       const feed = await fetchAllPublicBuilds();
       const data = extractBuildData(JSON.stringify({builds:feed.builds}));
 
+      // Preserve every public build for a card. The legacy "builds" map still
+      // points to the newest one so existing single-build behaviour stays intact.
+      const buildOptions = {};
+      for (const item of feed.builds) {
+        const buildID = String(item?.buildID || '');
+        const playerId = String(item?.playerID || buildID.split('_')[0] || '');
+        if (!isBuildString(buildID) || !/^\d{10,}$/.test(playerId)) continue;
+
+        if (!buildOptions[playerId]) buildOptions[playerId] = [];
+        buildOptions[playerId].push({
+          buildID,
+          buildName: String(item?.buildName || item?.playerNameEn || 'Build'),
+          playerName: String(item?.playerNameEn || item?.buildName || ''),
+          overall: Number(item?.overall || 0) || null,
+          booster2: item?.booster2 ?? null,
+          managerId: item?.selectedManagerID ? String(item.selectedManagerID) : null,
+          savedAt: Number(item?.savedAt?.seconds || 0) || 0,
+          url: `https://efhub.com/es/players/${playerId}?build=${encodeURIComponent(buildID)}&userId=${USER_ID}`
+        });
+      }
+
       return res.status(200).json({
         userId: USER_ID,
         count: Object.keys(data.builds).length,
@@ -335,6 +356,8 @@ export default async function handler(req, res) {
         portableCount: Object.keys(data.portableBuilds).length,
         booster2Count: Object.keys(data.booster2ByPlayer).length,
         builds: data.builds,
+        buildOptions,
+        multiBuildPlayers: Object.values(buildOptions).filter(list => list.length > 1).length,
         portableBuilds: data.portableBuilds,
         booster2ByPlayer: data.booster2ByPlayer,
         source: {
@@ -354,6 +377,8 @@ export default async function handler(req, res) {
         portableCount: 0,
         booster2Count: 0,
         builds: {},
+        buildOptions: {},
+        multiBuildPlayers: 0,
         portableBuilds: {},
         booster2ByPlayer: {}
       });
