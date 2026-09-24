@@ -22,18 +22,5 @@ jobs:
           echo "build strings: $(grep -oE '[0-9]{10,}(_[0-9]+){11}' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
           echo "player build urls: $(grep -oE 'players/[0-9]+[^" ]*build=[0-9_]+' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
           echo "api endpoint mentions: $(grep -o '/api/community/builds[^" <]*' /tmp/profile.html | sort -u | wc -l | tr -d ' ')"
-          echo '--- build-related snippets ---'
-          python - <<'PY'
-from pathlib import Path
-s=Path('/tmp/profile.html').read_text(errors='ignore')
-for needle in ['Builds','builds','/api/community/builds','community/build','build=','userBuild']:
-    print('\nNEEDLE',needle)
-    start=0
-    shown=0
-    while shown<5:
-        i=s.find(needle,start)
-        if i<0: break
-        print(s[max(0,i-700):i+1300].replace('\n',' ')[:2000])
-        start=i+len(needle)
-        shown+=1
-PY
+          echo "--- lines containing Builds/builds ---"
+          grep -oE '.{0,250}(Builds|builds|/api/community/builds|build=).{0,500}' /tmp/profile.html | head -n 30 || true
