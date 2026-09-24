@@ -12,32 +12,53 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Wait for Vercel production
-        run: sleep 5
-      - name: Inspect changed card metadata
+        run: sleep 3
+      - name: Print changed category order
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/efhub-lists
-          for i in $(seq 1 12); do
+          for i in 2 4 7 8 10 11 12; do
             curl -fsSL --retry 3 --retry-delay 2               "https://chupinho-tier-list.vercel.app/api/efhub?mode=list&id=$i"               -o "/tmp/efhub-lists/$i.html"
           done
           python - <<'PY'
+          from html.parser import HTMLParser
           from pathlib import Path
-          import re, html
-          ids=[
-            '88038776539586','88045755964138','88045755829779',
-            '88045755859255','88045755835027','88045755829367'
-          ]
-          blob='\n'.join(Path(f'/tmp/efhub-lists/{i}.html').read_text(errors='ignore') for i in range(1,13))
-          for pid in ids:
-              k=blob.find('player_cards/'+pid)
-              print('\nID',pid,'INDEX',k)
-              if k<0: continue
-              snippet=blob[max(0,k-1200):k+1800]
-              snippet=html.unescape(snippet)
-              snippet=re.sub(r'\\u003c','<',snippet)
-              snippet=re.sub(r'\\u003e','>',snippet)
-              snippet=re.sub(r'\\u0026','&',snippet)
-              snippet=re.sub(r'\\','',snippet)
-              print(snippet[:3000])
+          import re
+
+          TIERS={'S+','S','A','B','C','D','E'}
+          class P(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.stack=[]; self.current_tier=None; self.cards=[]
+              def handle_starttag(self,tag,attrs):
+                  attrs=dict(attrs); self.stack.append([tag,[]])
+                  if tag=='img' and self.current_tier:
+                      src=attrs.get('src',''); alt=(attrs.get('alt','') or '').replace('Image:','').strip()
+                      m=re.search(r'player_cards/(\d+)(?:_l)?\.png',src)
+                      if m:
+                          # rating/position are in the following sibling markup; extract later with regex.
+                          self.cards.append((m.group(1),alt,self.current_tier))
+              def handle_data(self,data):
+                  if self.stack: self.stack[-1][1].append(data)
+              def handle_endtag(self,tag):
+                  if not self.stack: return
+                  _,chunks=self.stack.pop(); text=' '.join(''.join(chunks).split())
+                  if text in TIERS: self.current_tier=text
+                  if self.stack and text: self.stack[-1][1].append(text)
+
+          for i in [2,4,7,8,10,11,12]:
+              raw=Path(f'/tmp/efhub-lists/{i}.html').read_text(errors='ignore')
+              p=P(); p.feed(raw)
+              seen=set(); rows=[]
+              for pid,name,tier in p.cards:
+                  if pid in seen: continue
+                  seen.add(pid)
+                  k=raw.find('player_cards/'+pid)
+                  chunk=raw[k:k+1500]
+                  m=re.search(r'font-size:15px">(\d{2,3})</span>.*?font-size:9px">(GK|CB|LB|RB|DMF|CMF|LMF|RMF|AMF|LWF|RWF|SS|CF)</span>',chunk,re.S)
+                  rating,pos=(m.group(1),m.group(2)) if m else ('','')
+                  rows.append((tier,pid,name,rating,pos))
+              print(f'CAT {i}:')
+              for n,row in enumerate(rows,1):
+                  print(f'  {n:02d}. {row[2]} | {row[1]} | {row[3]} {row[4]} | tier {row[0]}')
           PY
