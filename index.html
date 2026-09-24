@@ -376,6 +376,23 @@ let DATA = JSON.parse(JSON.stringify(FALLBACK_DATA));
 const app = document.getElementById('app');
 
 const EFHUB_PLAYER_BASE = 'https://efhub.com/es/players/';
+const EFHUB_MANAGER_PARAMS = {
+  mgr: '17605071047055',
+  msk: 'PossessionGame',
+  msv: '89'
+};
+
+function withManager(url) {
+  try {
+    const u = new URL(url);
+    u.searchParams.set('mgr', EFHUB_MANAGER_PARAMS.mgr);
+    u.searchParams.set('msk', EFHUB_MANAGER_PARAMS.msk);
+    u.searchParams.set('msv', EFHUB_MANAGER_PARAMS.msv);
+    return u.toString();
+  } catch(e) {
+    return url;
+  }
+}
 
 // Builds públicas de ChuPiNho.
 // Este mapa se rellena con los enlaces completos exportados desde eFHUB.
@@ -527,12 +544,18 @@ const CUSTOM_BUILD_URLS = {
   "88044145217198": "https://efhub.com/es/players/88044145217198?build=88044145217198_8_4_5_0_9_8_0_0_0_9_8&userId=116014046796435242846"
 };
 
+for (const playerId of Object.keys(CUSTOM_BUILD_URLS)) {
+  CUSTOM_BUILD_URLS[playerId] = withManager(CUSTOM_BUILD_URLS[playerId]);
+}
+
 // Sincronización automática de builds públicas de ChuPiNho.
 // eFHUB carga esta información desde /api/community/builds al abrir la pestaña Builds.
 try {
   const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v2') || 'null');
   if (cached && typeof cached === 'object' && !Array.isArray(cached)) {
-    Object.assign(CUSTOM_BUILD_URLS, cached);
+    for (const [playerId, url] of Object.entries(cached)) {
+      CUSTOM_BUILD_URLS[playerId] = withManager(url);
+    }
   }
 } catch(e) {}
 
@@ -548,9 +571,16 @@ async function syncPublicBuilds() {
 
     const count = Object.keys(incoming).length;
     if (count > 0) {
-      Object.assign(CUSTOM_BUILD_URLS, incoming);
+      for (const [playerId, url] of Object.entries(incoming)) {
+        CUSTOM_BUILD_URLS[playerId] = withManager(url);
+      }
       try {
-        localStorage.setItem('efhub_public_builds_v2', JSON.stringify(incoming));
+        localStorage.setItem(
+          'efhub_public_builds_v2',
+          JSON.stringify(Object.fromEntries(
+            Object.entries(incoming).map(([playerId, url]) => [playerId, withManager(url)])
+          ))
+        );
       } catch(e) {}
     }
 
