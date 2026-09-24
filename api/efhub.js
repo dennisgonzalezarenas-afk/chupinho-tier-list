@@ -3,6 +3,10 @@ const MANAGER_ID = '17605071047055';
 const MANAGER_SKILL = 'PossessionGame';
 const MANAGER_VALUE = '89';
 
+const POSITION_BY_CODE = [
+  'GK','CB','LB','RB','DMF','CMF','LMF','RMF','AMF','LWF','RWF','SS','CF'
+];
+
 function normalizeBody(body) {
   return String(body || '')
     .replace(/\\u0026/gi, '&')
@@ -13,30 +17,182 @@ function normalizeBody(body) {
     .replace(/&#38;/gi, '&');
 }
 
-function extractBuilds(text) {
-  const normalized = normalizeBody(text);
-  const builds = {};
+function isBuildString(value) {
+  return typeof value === 'string' && /^\d{10,}(?:_\d+){11}$/.test(value);
+}
 
-  const add = (build) => {
-    if (!build || !/^\d{10,}(?:_\d+)+$/.test(build)) return;
-    const playerId = build.split('_')[0];
-    if (!builds[playerId]) {
-      builds[playerId] = `https://efhub.com/es/players/${playerId}?build=${build}&userId=${USER_ID}&mgr=${MANAGER_ID}&msk=${MANAGER_SKILL}&msv=${MANAGER_VALUE}`;
-    }
+function buildToPortableUrl(build, booster2=null) {
+  if (!isBuildString(build)) return null;
+
+  const parts = build.split('_');
+  const playerId = parts.shift();
+  const n = parts.map(v => Number(v));
+
+  const params = new URLSearchParams();
+  const progression = {
+    sho:n[0], pas:n[1], dri:n[2], def:n[3], aes:n[4],
+    dex:n[5], gk1:n[6], gk2:n[7], gk3:n[8], lbs:n[9]
   };
 
-  for (const m of normalized.matchAll(/(?:[?&])build=([0-9_]+)/gi)) add(m[1]);
-  for (const m of normalized.matchAll(/["']build["']\s*:\s*["']([0-9_]+)["']/gi)) add(m[1]);
-  for (const m of normalized.matchAll(/\b(\d{10,}(?:_\d+){4,})\b/g)) add(m[1]);
+  for (const [key,value] of Object.entries(progression)) {
+    if (Number.isFinite(value) && value > 0) params.set(key, String(value));
+  }
 
-  return builds;
+  const pos = POSITION_BY_CODE[n[10]];
+  if (pos) params.set('pos', pos);
+
+  if (booster2 !== null && booster2 !== undefined && booster2 !== '') {
+    params.set('b2', String(booster2));
+  }
+
+  params.set('mgr', MANAGER_ID);
+  params.set('msk', MANAGER_SKILL);
+  params.set('msv', MANAGER_VALUE);
+
+  return `https://efhub.com/es/players/${playerId}?${params.toString()}`;
+}
+
+function extractBooster2FromValue(value) {
+  if (typeof value === 'string') {
+    const m = value.match(/[?&]b2=(\d+)/i);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function scalarFromCandidate(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value)) return value;
+  if (value && typeof value === 'object') {
+    for (const key of ['id','value','boosterId','boosterID','booster_id','code']) {
+      const v = value[key];
+      if ((typeof v === 'number' && Number.isFinite(v)) || (typeof v === 'string' && /^\d+$/.test(v))) {
+        return v;
+      }
+    }
+  }
+  return null;
+}
+
+function findBooster2(obj, maxDepth=5) {
+  const exact = new Set([
+    'b2','booster2','booster2id','booster2_id','secondbooster',
+    'secondboosterid','secondbooster_id','selectedbooster2',
+    'selectedbooster2id','selectedbooster2_id','booster_2'
+  ]);
+
+  const seen = new Set();
+
+  function walk(value, depth) {
+    if (depth > maxDepth || value == null) return null;
+
+    const fromString = extractBooster2FromValue(value);
+    if (fromString) return fromString;
+
+    if (typeof value !== 'object') return null;
+    if (seen.has(value)) return null;
+    seen.add(value);
+
+    for (const [key,val] of Object.entries(value)) {
+      const normalized = key.toLowerCase().replace(/[^a-z0-9_]/g,'');
+      if (exact.has(normalized)) {
+        const scalar = scalarFromCandidate(val);
+        if (scalar !== null) return scalar;
+      }
+    }
+
+    for (const [key,val] of Object.entries(value)) {
+      const normalized = key.toLowerCase().replace(/[^a-z0-9_]/g,'');
+      if (
+        normalized.includes('booster') &&
+        (normalized.includes('second') || normalized.endsWith('2') || normalized.includes('_2'))
+      ) {
+        const scalar = scalarFromCandidate(val);
+        if (scalar !== null) return scalar;
+      }
+    }
+
+    for (const val of Object.values(value)) {
+      const found = walk(val, depth + 1);
+      if (found !== null) return found;
+    }
+
+    return null;
+  }
+
+  return walk(obj, 0);
+}
+
+function extractBuildData(text) {
+  const normalized = normalizeBody(text);
+  const builds = {};
+  const portableBuilds = {};
+  const booster2ByPlayer = {};
+
+  let parsed = null;
+  try { parsed = JSON.parse(normalized); } catch(e) {}
+
+  const add = (build, context=null) => {
+    if (!isBuildString(build)) return;
+    const playerId = build.split('_')[0];
+
+    if (!builds[playerId]) {
+      builds[playerId] = `https://efhub.com/es/players/${playerId}?build=${build}&userId=${USER_ID}`;
+    }
+
+    const b2 = context ? findBooster2(context) : null;
+    if (b2 !== null && b2 !== undefined && b2 !== '') {
+      booster2ByPlayer[playerId] = String(b2);
+    }
+
+    const portable = buildToPortableUrl(build, booster2ByPlayer[playerId] ?? null);
+    if (portable) portableBuilds[playerId] = portable;
+  };
+
+  if (parsed && typeof parsed === 'object') {
+    const seen = new Set();
+
+    const walk = (value, ancestors=[]) => {
+      if (value == null) return;
+
+      if (typeof value === 'string') {
+        if (isBuildString(value)) {
+          const context = ancestors.length ? ancestors[ancestors.length - 1] : null;
+          add(value, context);
+        }
+        for (const m of value.matchAll(/(?:[?&])build=(\d{10,}(?:_\d+){11})/gi)) {
+          const context = ancestors.length ? ancestors[ancestors.length - 1] : null;
+          add(m[1], context);
+        }
+        return;
+      }
+
+      if (typeof value !== 'object' || seen.has(value)) return;
+      seen.add(value);
+
+      const nextAncestors = [...ancestors, value].slice(-4);
+
+      for (const val of Object.values(value)) {
+        walk(val, nextAncestors);
+      }
+    };
+
+    walk(parsed);
+  }
+
+  // Respaldo por texto, por si eFHUB cambia la forma del JSON.
+  for (const m of normalized.matchAll(/(?:[?&])build=(\d{10,}(?:_\d+){11})/gi)) add(m[1], null);
+  for (const m of normalized.matchAll(/["']build["']\s*:\s*["'](\d{10,}(?:_\d+){11})["']/gi)) add(m[1], null);
+  for (const m of normalized.matchAll(/\b(\d{10,}(?:_\d+){11})\b/g)) add(m[1], null);
+
+  return { builds, portableBuilds, booster2ByPlayer };
 }
 
 async function fetchEfhub(url) {
   const r = await fetch(url, {
     headers: {
       'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36',
-      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'accept': 'application/json,text/plain,text/html,application/xhtml+xml,*/*;q=0.8',
       'accept-language': 'es-ES,es;q=0.9,en;q=0.7',
       'cache-control': 'no-cache'
     },
@@ -52,18 +208,22 @@ export default async function handler(req, res) {
 
   if (req.query && req.query.mode === 'builds') {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
-
-    // Endpoint real usado por eFHUB al abrir la pestaña Builds del perfil público.
     const url = `https://efhub.com/api/community/builds?userId=${USER_ID}&locale=es`;
 
     try {
       const r = await fetchEfhub(url);
-      const builds = r.ok ? extractBuilds(r.body) : {};
+      const data = r.ok ? extractBuildData(r.body) : {
+        builds:{}, portableBuilds:{}, booster2ByPlayer:{}
+      };
 
       return res.status(r.ok ? 200 : r.status).json({
         userId: USER_ID,
-        count: Object.keys(builds).length,
-        builds,
+        count: Object.keys(data.builds).length,
+        portableCount: Object.keys(data.portableBuilds).length,
+        booster2Count: Object.keys(data.booster2ByPlayer).length,
+        builds: data.builds,
+        portableBuilds: data.portableBuilds,
+        booster2ByPlayer: data.booster2ByPlayer,
         source: {
           url,
           ok: r.ok,
@@ -76,7 +236,11 @@ export default async function handler(req, res) {
         error: String(e && e.message || e),
         userId: USER_ID,
         count: 0,
-        builds: {}
+        portableCount: 0,
+        booster2Count: 0,
+        builds: {},
+        portableBuilds: {},
+        booster2ByPlayer: {}
       });
     }
   }
@@ -84,6 +248,7 @@ export default async function handler(req, res) {
   const source = new URL('https://efhub.com/es/tier-list/116014046796435242846_f1163d0a-6eed-4b91-92f3-2b925fe7eee7');
   source.searchParams.set('refresh', Date.now().toString());
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+
   try {
     const r = await fetchEfhub(source);
     res.status(r.ok ? 200 : r.status).send(r.body);
