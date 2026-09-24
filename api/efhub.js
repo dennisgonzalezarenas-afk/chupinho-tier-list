@@ -4,18 +4,18 @@ const MANAGER_SKILL = 'PossessionGame';
 const MANAGER_VALUE = '89';
 
 const TIER_LIST_URLS = [
-  "https://efhub.com/es/tier-list/116014046796435242846_cf4606d9-9aac-4658-9f5e-e8a3b9bc0a13",
-  "https://efhub.com/es/tier-list/116014046796435242846_27a1df05-c04d-4130-b138-35e85a1bc0d0",
-  "https://efhub.com/es/tier-list/116014046796435242846_ee5b5025-17ee-4af2-a6a6-24ba5ea2c71d",
-  "https://efhub.com/es/tier-list/116014046796435242846_b5fe2af3-fa77-4041-80b1-0d455fef9e4a",
-  "https://efhub.com/es/tier-list/116014046796435242846_256dd05d-39af-4aa4-89b1-75058c193c1f",
-  "https://efhub.com/es/tier-list/116014046796435242846_40003376-ae79-470b-bfb4-b069ea25f272",
   "https://efhub.com/es/tier-list/116014046796435242846_78046652-98a8-48eb-9140-b25e37781b9c",
   "https://efhub.com/es/tier-list/116014046796435242846_8787408d-e9c5-4a33-8690-8aec8605aba2",
   "https://efhub.com/es/tier-list/116014046796435242846_c33fc4ce-0afa-45de-b407-fbbc713d1125",
   "https://efhub.com/es/tier-list/116014046796435242846_c1005476-a159-482d-9ac4-6b42d83be5f1",
   "https://efhub.com/es/tier-list/116014046796435242846_0e2075d3-d3b3-4ed7-8c3a-7804e869aa11",
-  "https://efhub.com/es/tier-list/116014046796435242846_c8204e72-a8eb-455c-b97a-59d131dc6348"
+  "https://efhub.com/es/tier-list/116014046796435242846_c8204e72-a8eb-455c-b97a-59d131dc6348",
+  "https://efhub.com/es/tier-list/116014046796435242846_cf4606d9-9aac-4658-9f5e-e8a3b9bc0a13",
+  "https://efhub.com/es/tier-list/116014046796435242846_27a1df05-c04d-4130-b138-35e85a1bc0d0",
+  "https://efhub.com/es/tier-list/116014046796435242846_ee5b5025-17ee-4af2-a6a6-24ba5ea2c71d",
+  "https://efhub.com/es/tier-list/116014046796435242846_b5fe2af3-fa77-4041-80b1-0d455fef9e4a",
+  "https://efhub.com/es/tier-list/116014046796435242846_256dd05d-39af-4aa4-89b1-75058c193c1f",
+  "https://efhub.com/es/tier-list/116014046796435242846_40003376-ae79-470b-bfb4-b069ea25f272"
 ];
 
 const POSITION_BY_CODE = [
