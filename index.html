@@ -551,10 +551,10 @@ for (const playerId of Object.keys(CUSTOM_BUILD_URLS)) {
 // Sincronización automática de builds públicas de ChuPiNho.
 // eFHUB carga esta información desde /api/community/builds al abrir la pestaña Builds.
 try {
-  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v4') || 'null');
+  const cached = JSON.parse(localStorage.getItem('efhub_public_builds_v5') || 'null');
   if (cached && typeof cached === 'object' && !Array.isArray(cached)) {
     for (const [playerId, url] of Object.entries(cached)) {
-      CUSTOM_BUILD_URLS[playerId] = url;
+      CUSTOM_BUILD_URLS[playerId] = withManager(url);
     }
   }
 } catch(e) {}
@@ -565,21 +565,20 @@ async function syncPublicBuilds() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
 
     const payload = await r.json();
-    const portable = payload && payload.portableBuilds && typeof payload.portableBuilds === 'object'
-      ? payload.portableBuilds
-      : {};
     const legacy = payload && payload.builds && typeof payload.builds === 'object'
       ? payload.builds
       : {};
-    const incoming = Object.keys(portable).length ? portable : legacy;
+    // eFHUB resolves the saved public build (including its second booster)
+    // through build + userId. Individual progression parameters lose that context.
+    const incoming = legacy;
 
     const count = Object.keys(incoming).length;
     if (count > 0) {
       for (const [playerId, url] of Object.entries(incoming)) {
-        CUSTOM_BUILD_URLS[playerId] = url;
+        CUSTOM_BUILD_URLS[playerId] = withManager(url);
       }
       try {
-        localStorage.setItem('efhub_public_builds_v4', JSON.stringify(incoming));
+        localStorage.setItem('efhub_public_builds_v5', JSON.stringify(incoming));
       } catch(e) {}
     }
 
@@ -608,8 +607,7 @@ function efhubPlayerIdFromCard(card) {
   return null;
 }
 
-app.addEventListener('dblclick', (event) => {
-  const card = event.target.closest('.card');
+function openCard(card) {
   if (!card || !app.contains(card)) return;
 
   const playerId = efhubPlayerIdFromCard(card);
@@ -617,7 +615,23 @@ app.addEventListener('dblclick', (event) => {
 
   const target = CUSTOM_BUILD_URLS[playerId] || (EFHUB_PLAYER_BASE + playerId);
   window.open(target, '_blank', 'noopener,noreferrer');
+}
+app.addEventListener('dblclick', (event) => {
+  if (event.pointerType === 'touch') return;
+  openCard(event.target.closest('.card'));
 });
+let lastTouch = {card:null, time:0};
+app.addEventListener('touchend', (event) => {
+  const card = event.target.closest('.card');
+  const now = Date.now();
+  if (card && lastTouch.card === card && now - lastTouch.time < 450) {
+    event.preventDefault();
+    openCard(card);
+    lastTouch = {card:null, time:0};
+  } else {
+    lastTouch = {card, time:now};
+  }
+}, {passive:false});
 
 const SOURCE_URL = 'https://efhub.com/es/tier-list/116014046796435242846_f1163d0a-6eed-4b91-92f3-2b925fe7eee7';
 
@@ -992,7 +1006,7 @@ document.getElementById('syncBtn')?.addEventListener('click', ()=>syncFromEfhub(
 document.getElementById('forceBtn')?.addEventListener('click', ()=>{
   try {
     localStorage.removeItem('efhub_live_data_v13_profiles');
-    localStorage.removeItem('efhub_public_builds_v4');
+    localStorage.removeItem('efhub_public_builds_v5');
   } catch(e) {}
   syncFromEfhub(true);
 });
